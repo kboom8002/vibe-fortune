@@ -19,6 +19,8 @@ import {
   AnnualLuckResult,
   CalculateDailyLuckRangeInput,
   DailyLuckRangeResult,
+  CalculateMonthlyLuckInput,
+  MonthlyLuckResult,
 } from "./types";
 import { ManseWarning } from "@/schemas/manse-chart.schema";
 import { ProvidedChartSchema } from "@/schemas/birth-profile.schema";
@@ -288,6 +290,33 @@ export function calculateAnnualLuck(input: CalculateAnnualLuckInput): AnnualLuck
 }
 
 /**
+ * 4.3b calculateMonthlyLuck
+ * 지정된 연/월의 월운을 결정론적으로 산출한다.
+ * 양력 해당월 중순(15일) 기준으로 lunar-javascript를 통해 월간·월지를 산출.
+ */
+export function calculateMonthlyLuck(input: CalculateMonthlyLuckInput): MonthlyLuckResult {
+  const { year, month } = input;
+
+  // 해당 월의 중순(15일)을 기준으로 월주를 산출
+  const solar = Solar.fromYmd(year, month, 15);
+  const lunar = solar.getLunar();
+  const eightChar = lunar.getEightChar();
+
+  const stem = eightChar.getMonthGan() as HeavenlyStem;
+  const branch = eightChar.getMonthZhi() as EarthlyBranch;
+
+  return {
+    year,
+    month,
+    pillar: {
+      stem,
+      branch,
+      label: stem + branch,
+    },
+  };
+}
+
+/**
  * 4.4 calculateDailyLuckRange
  * 주어진 범위 내 일운(일주) 목록을 산출한다.
  */
@@ -368,3 +397,18 @@ export function checkChartConsistency(
       : "계산값과 사용자 제공 사주명식이 일치합니다.",
   };
 }
+
+// ========== 신규 모듈 re-export ==========
+export { calculateTenGods, calculateAllTenGods, calculateTenGodsForBranch } from "./ten-gods";
+export type { TenGodName } from "./ten-gods";
+
+export { analyzeInteractions } from "./interactions";
+export type { InteractionResult, InteractionType } from "./interactions";
+
+export { analyzeDivineKillers } from "./divine-killers";
+export type { DivineKillerResult, DivineKillerType } from "./divine-killers";
+
+export { analyzeHiddenStems, analyzeHiddenStemsForBranch } from "./hidden-stems-analysis";
+export type { HiddenStemAnalysis, HiddenStemDetail } from "./hidden-stems-analysis";
+
+

@@ -95,3 +95,14 @@ export type DailyLuckRangeResult = {
     pillar: Pillar;
   }[];
 };
+
+export type CalculateMonthlyLuckInput = {
+  year: number;
+  month: number; // 1~12
+};
+
+export type MonthlyLuckResult = {
+  year: number;
+  month: number;
+  pillar: Pillar;
+};

@@ -1,6 +1,10 @@
+import { z } from "zod";
 import { VibeFortuneAgentState } from "./state";
 import { calculateChart, calculateMajorLuck, checkChartConsistency } from "../manse";
 import { tcoPackLoader } from "../tco/pack-loader";
+import { loadPrompt } from "./prompt-loader";
+import { llmProvider } from "@/lib/llm/provider";
+import { checkInputSafety, checkOutputSafety } from "@/lib/safety";
 
 // 1. InputIntakeNode
 export async function InputIntakeNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
@@ -33,36 +37,25 @@ export async function SafetyGateNode(state: VibeFortuneAgentState): Promise<Part
   const safetyFlags = [...(state.safetyFlags || [])];
   const errors = [...(state.errors || [])];
 
-  if (userMessage.includes("자해") || userMessage.includes("자살")) {
+  // Use the safety module for comprehensive input checking
+  const inputSafetyResult = checkInputSafety(userMessage);
+
+  for (const flag of inputSafetyResult.flags) {
     safetyFlags.push({
-      type: "self_harm",
-      severity: "critical",
-      action: "blocked",
-      message: "자해 혹은 자살 관련 메시지가 감지되어 서비스를 중단합니다.",
+      type: flag.type,
+      severity: flag.severity,
+      action: flag.action,
+      message: flag.message,
     });
+  }
+
+  // Block the entire request if safety check determined it's unsafe (critical/blocked)
+  if (!inputSafetyResult.safe) {
     errors.push({
       code: "SAFETY_BLOCKED",
       message: "안전 가이드라인 위반으로 요청이 차단되었습니다.",
       recoverable: false,
       node: "SafetyGateNode",
-    });
-  }
-
-  if (userMessage.includes("치료") || userMessage.includes("수술") || userMessage.includes("암")) {
-    safetyFlags.push({
-      type: "medical",
-      severity: "medium",
-      action: "boundary_added",
-      message: "의학적 소견은 반드시 전문의와 상담하십시오.",
-    });
-  }
-
-  if (userMessage.includes("주식") || userMessage.includes("투자") || userMessage.includes("돈 보장")) {
-    safetyFlags.push({
-      type: "investment",
-      severity: "medium",
-      action: "boundary_added",
-      message: "본 분석은 특정 투자 성과를 보장하지 않습니다.",
     });
   }
 
@@ -268,27 +261,82 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
 }
 
 // 9. ConceptCanonicalizerNode
+// Zod schema for the LLM's concept canonicalization output (subset without IDs/timestamps)
+const ConceptCanonLLMOutputSchema = z.object({
+  coreConceptState: z.string().min(1),
+  activeConcepts: z.array(z.string()),
+  suppressedConcepts: z.array(z.string()),
+  conceptGaps: z.array(z.string()),
+  evidenceGaps: z.array(z.string()),
+  boundaryGaps: z.array(z.string()),
+  conversionGaps: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+});
+
 export async function ConceptCanonicalizerNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "ConceptCanonicalizerNode"];
   const dmElem = state.chart?.dayMaster?.element || "earth";
   
-  const activeConcepts = [`element.${dmElem}.stabilization`];
+  // Deterministic fallback values
+  const fallbackActiveConcepts = [`element.${dmElem}.stabilization`];
   if (state.input?.currentFocus) {
-    activeConcepts.push(`focus.${state.input.currentFocus}`);
+    fallbackActiveConcepts.push(`focus.${state.input.currentFocus}`);
+  }
+
+  const fallbackLLMOutput = {
+    coreConceptState: fallbackActiveConcepts[0],
+    activeConcepts: fallbackActiveConcepts,
+    suppressedConcepts: [] as string[],
+    conceptGaps: [] as string[],
+    evidenceGaps: [] as string[],
+    boundaryGaps: [] as string[],
+    conversionGaps: [] as string[],
+    confidence: 1.0,
+  };
+
+  let llmResult = fallbackLLMOutput;
+
+  try {
+    const systemPrompt = loadPrompt("system");
+    const conceptPrompt = loadPrompt("concept_canonicalizer");
+
+    // Build context for the LLM (chart data summary, vibe, focus — never send raw pillars for LLM to calculate)
+    const contextForLLM = [
+      conceptPrompt,
+      "",
+      "--- Context ---",
+      `Day Master Element: ${dmElem}`,
+      `Day Master Stem: ${state.chart?.dayMaster?.stem || "unknown"}`,
+      `Day Master Yin/Yang: ${state.chart?.dayMaster?.polarity || "unknown"}`,
+      `User Focus: ${state.input?.currentFocus || "general"}`,
+      `Vibe Valence: ${state.vibeCheckIn?.valence ?? 5}`,
+      `Vibe Energy: ${state.vibeCheckIn?.energy ?? 5}`,
+      `Vibe Focus: ${state.vibeCheckIn?.focus ?? 5}`,
+      `Vibe Arousal: ${state.vibeCheckIn?.arousal ?? 5}`,
+      `Vibe SocialLoad: ${state.vibeCheckIn?.socialLoad ?? 5}`,
+      "",
+      "Return ConceptState JSON only. Do not calculate chart values.",
+    ].join("\n");
+
+    llmResult = await llmProvider.generateStructuredOutput(
+      contextForLLM,
+      systemPrompt,
+      ConceptCanonLLMOutputSchema,
+      fallbackLLMOutput
+    );
+  } catch (err) {
+    console.warn(
+      "[ConceptCanonicalizerNode] LLM call failed, using deterministic fallback.",
+      err instanceof Error ? err.message : err
+    );
+    // llmResult remains as fallbackLLMOutput
   }
 
   const conceptState = {
     id: crypto.randomUUID(),
     userId: state.userId,
     forecastRequestId: state.requestId,
-    coreConceptState: activeConcepts[0],
-    activeConcepts,
-    suppressedConcepts: [],
-    conceptGaps: [],
-    evidenceGaps: [],
-    boundaryGaps: [],
-    conversionGaps: [],
-    confidence: 1.0,
+    ...llmResult,
     createdAt: new Date().toISOString(),
   };
 
@@ -420,6 +468,17 @@ export async function PolicyBinderNode(state: VibeFortuneAgentState): Promise<Pa
 }
 
 // 13. ForecastWriterNode
+// Zod schema for the LLM's forecast writer output (narrative fields only)
+const ForecastWriterLLMOutputSchema = z.object({
+  summary: z.string().min(1),
+  conceptStateDescription: z.string().min(1),
+  actionPolicyExplanation: z.string().min(1),
+  vibeInterpretation: z.string().optional(),
+  riskNarrative: z.string().optional(),
+  reflectionQuestion: z.string().optional(),
+  outputMarkdown: z.string().min(1),
+});
+
 export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "ForecastWriterNode"];
   
@@ -429,25 +488,107 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
     };
   }
 
-  const summary = `오늘 일간 ${state.chart?.dayMaster.stem}의 운성 흐름 하에, 활력도(${state.vibeCheckIn?.energy})를 보완하여 완급조절을 달성하십시오.`;
+  // Hardcoded fallback values (original deterministic output)
+  const fallbackSummary = `오늘 일간 ${state.chart?.dayMaster?.stem || "?"}의 운성 흐름 하에, 활력도(${state.vibeCheckIn?.energy ?? 5})를 보완하여 완급조절을 달성하십시오.`;
 
-  const outputJson = {
-    summary,
+  const fallbackOutputJson = {
+    summary: fallbackSummary,
     conceptStateDescription: "목적 지향적인 몰입과 계획이 활성화되는 시점입니다.",
     actionPolicyExplanation: "지속 가능한 성과를 도출하기 위해 분산된 노력을 통제하십시오.",
   };
 
-  const outputMarkdown = `### ☯ 오늘의 우주적 기류 및 바이브 분석
-- **한 줄 요약**: ${outputJson.summary}
+  const fallbackOutputMarkdown = `### ☯ 오늘의 우주적 기류 및 바이브 분석
+- **한 줄 요약**: ${fallbackOutputJson.summary}
 - **조율 방향**: 침착한 분석을 통해 장기 과제에 에너지를 집중하십시오.
 
 ### 📋 오늘의 자기운영 지침 (Action Policy)
-- **필수 행동**: ${state.actionPolicy?.requiredActions.join(", ")}
-- **금지 행동**: ${state.actionPolicy?.forbiddenActions.join(", ")}
-- **보류 행동**: ${state.actionPolicy?.deferredActions.join(", ")}
+- **필수 행동**: ${state.actionPolicy?.requiredActions?.join(", ") || "핵심 업무 1가지 완수"}
+- **금지 행동**: ${state.actionPolicy?.forbiddenActions?.join(", ") || "충동적 약속"}
+- **보류 행동**: ${state.actionPolicy?.deferredActions?.join(", ") || "신규 전략 회의"}
 
 > [!NOTE]
-> ${state.actionPolicy?.boundaryNotes.join(" \n> ")}`;
+> ${state.actionPolicy?.boundaryNotes?.join(" \n> ") || "과로 금지, 충분한 수면 확보"}`;
+
+  let outputJson = fallbackOutputJson;
+  let outputMarkdown = fallbackOutputMarkdown;
+
+  try {
+    const systemPrompt = loadPrompt("system");
+    const forecastPrompt = loadPrompt("forecast_writer");
+
+    // Build comprehensive context for the LLM forecast writer
+    const contextForLLM = [
+      forecastPrompt,
+      "",
+      "--- Deterministic Chart Data (pre-calculated, DO NOT recalculate) ---",
+      `Day Master: ${state.chart?.dayMaster?.stem || "unknown"} (${state.chart?.dayMaster?.element || "unknown"}, ${state.chart?.dayMaster?.polarity || "unknown"})`,
+      `Year Pillar: ${state.chart?.pillars?.year?.label || "unknown"}`,
+      `Month Pillar: ${state.chart?.pillars?.month?.label || "unknown"}`,
+      `Day Pillar: ${state.chart?.pillars?.day?.label || "unknown"}`,
+      `Hour Pillar: ${state.chart?.pillars?.hour?.label || "unknown"}`,
+      "",
+      "--- Vibe Check-In ---",
+      `Valence: ${state.vibeCheckIn?.valence ?? 5}`,
+      `Arousal: ${state.vibeCheckIn?.arousal ?? 5}`,
+      `Energy: ${state.vibeCheckIn?.energy ?? 5}`,
+      `Focus: ${state.vibeCheckIn?.focus ?? 5}`,
+      `SocialLoad: ${state.vibeCheckIn?.socialLoad ?? 5}`,
+      "",
+      "--- Concept State ---",
+      `Core Concept: ${state.conceptState?.coreConceptState || "unknown"}`,
+      `Active Concepts: ${state.conceptState?.activeConcepts?.join(", ") || "none"}`,
+      `Concept Gaps: ${state.conceptState?.conceptGaps?.join(", ") || "none"}`,
+      "",
+      "--- Risk Vector ---",
+      `Primary Risk: ${state.riskVector?.primaryRisk || "unknown"}`,
+      `Burnout: ${state.riskVector?.burnout ?? 0}`,
+      `Overextension: ${state.riskVector?.overextension ?? 0}`,
+      `Overclaim: ${state.riskVector?.overclaim ?? 0}`,
+      "",
+      "--- Action Policy ---",
+      `Mode: ${state.actionPolicy?.mode || "Consolidation"}`,
+      `Warmth vs Competence: ${state.actionPolicy?.warmthVsCompetence || "Balanced"}`,
+      `Required Actions: ${state.actionPolicy?.requiredActions?.join("; ") || "none"}`,
+      `Forbidden Actions: ${state.actionPolicy?.forbiddenActions?.join("; ") || "none"}`,
+      `Deferred Actions: ${state.actionPolicy?.deferredActions?.join("; ") || "none"}`,
+      `Boundary Notes: ${state.actionPolicy?.boundaryNotes?.join("; ") || "none"}`,
+      `Review Questions: ${state.actionPolicy?.reviewQuestions?.join("; ") || "none"}`,
+      "",
+      "--- Safety Flags ---",
+      state.safetyFlags?.length ? state.safetyFlags.map(f => `[${f.type}] ${f.message}`).join("\n") : "none",
+      "",
+      "Generate a forecast output with: summary, conceptStateDescription, actionPolicyExplanation, and outputMarkdown.",
+      "The outputMarkdown should be user-facing Korean text in rich markdown format.",
+      "Do NOT produce deterministic predictions. Use structural prior language.",
+    ].join("\n");
+
+    const fallbackLLMOutput = {
+      summary: fallbackOutputJson.summary,
+      conceptStateDescription: fallbackOutputJson.conceptStateDescription,
+      actionPolicyExplanation: fallbackOutputJson.actionPolicyExplanation,
+      outputMarkdown: fallbackOutputMarkdown,
+    };
+
+    const llmResult = await llmProvider.generateStructuredOutput(
+      contextForLLM,
+      systemPrompt,
+      ForecastWriterLLMOutputSchema,
+      fallbackLLMOutput
+    );
+
+    outputJson = {
+      summary: llmResult.summary,
+      conceptStateDescription: llmResult.conceptStateDescription,
+      actionPolicyExplanation: llmResult.actionPolicyExplanation,
+    };
+    outputMarkdown = llmResult.outputMarkdown;
+  } catch (err) {
+    console.warn(
+      "[ForecastWriterNode] LLM call failed, using hardcoded fallback.",
+      err instanceof Error ? err.message : err
+    );
+    // outputJson and outputMarkdown remain as fallback values
+  }
 
   const draftOutput = {
     id: crypto.randomUUID(),
@@ -473,14 +614,45 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
 // 14. SafetyBoundaryReviewerNode
 export async function SafetyBoundaryReviewerNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "SafetyBoundaryReviewerNode"];
-  const finalOutput = state.draftOutput as any;
+  const safetyFlags = [...(state.safetyFlags || [])];
+  const finalOutput = { ...(state.draftOutput as any) };
 
-  if (finalOutput && !finalOutput.outputMarkdown.includes("안전 경계 알림")) {
+  if (finalOutput?.outputMarkdown) {
+    // Run output through the safety module
+    const outputSafetyResult = checkOutputSafety(finalOutput.outputMarkdown);
+
+    // Add any detected safety flags to the state
+    for (const flag of outputSafetyResult.flags) {
+      safetyFlags.push({
+        type: flag.type,
+        severity: flag.severity,
+        action: flag.action,
+        message: flag.message,
+      });
+    }
+
+    // If sanitized output was produced, use it
+    if (outputSafetyResult.sanitizedOutput) {
+      finalOutput.outputMarkdown = outputSafetyResult.sanitizedOutput;
+    }
+
+    // Update safety flags on the output itself
+    finalOutput.safetyFlags = Array.from(
+      new Set([
+        ...(finalOutput.safetyFlags || []),
+        ...outputSafetyResult.flags.map((f: { type: string }) => f.type),
+      ])
+    );
+  }
+
+  // Always append the boundary disclaimer
+  if (finalOutput?.outputMarkdown && !finalOutput.outputMarkdown.includes("안전 경계 알림")) {
     finalOutput.outputMarkdown += `\n\n--- \n*본 행동 정책은 명리학적 조언과 자가 기록한 바이브 상태에 근거한 가이드라인이며, 중요한 의사결정 시 전문가와 상담을 추천합니다.*`;
   }
 
   return {
     finalOutput,
+    safetyFlags,
     runtime: {
       ...state.runtime,
       nodeHistory: history,

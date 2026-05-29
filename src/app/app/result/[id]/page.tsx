@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { calculateChart, calculateMajorLuck, calculateAnnualLuck } from "@/lib/manse";
+import { calculateChart, calculateMajorLuck, calculateAnnualLuck, calculateAllTenGods, analyzeInteractions, analyzeDivineKillers } from "@/lib/manse";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -36,6 +36,9 @@ export default function ForecastResultPage() {
   const [chart, setChart] = useState<any>(null);
   const [majorLuck, setMajorLuck] = useState<any>(null);
   const [annualLuck, setAnnualLuck] = useState<any>(null);
+  const [tenGods, setTenGods] = useState<Record<string, string> | null>(null);
+  const [interactions, setInteractions] = useState<any[]>([]);
+  const [divineKillers, setDivineKillers] = useState<any[]>([]);
   const [vibe, setVibe] = useState<any>(null);
   const [forecast, setForecast] = useState<any>(null);
   const [llmLoading, setLlmLoading] = useState(false);
@@ -84,6 +87,13 @@ export default function ForecastResultPage() {
         });
         setAnnualLuck(al);
       } catch (e) { console.warn("세운 계산 실패:", e); }
+
+      // 십신 계산
+      try { setTenGods(calculateAllTenGods(chartResult)); } catch (e) { console.warn("십신 계산 실패:", e); }
+      // 합충형파해
+      try { setInteractions(analyzeInteractions(chartResult)); } catch (e) { console.warn("합충 계산 실패:", e); }
+      // 신살
+      try { setDivineKillers(analyzeDivineKillers(chartResult)); } catch (e) { console.warn("신살 계산 실패:", e); }
 
       // 2. LLM 기반 포캐스트 비동기 호출
       if (storedVibe) {
@@ -297,6 +307,84 @@ export default function ForecastResultPage() {
                     <div className="text-xs text-zinc-400">
                       <p>올해의 흐름을 지배하는 기운</p>
                     </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* ═══════════════════════════════════════════════ */}
+          {/* 십신 (Ten Gods) */}
+          {/* ═══════════════════════════════════════════════ */}
+          {tenGods && (
+            <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
+                <Target className="w-4 h-4 text-purple-400" />
+                십신 (十神) 분석
+              </h2>
+              <div className="grid grid-cols-4 gap-3 text-center text-xs">
+                {(["year", "month", "day", "hour"] as const).map((p) => {
+                  const label = p === "year" ? "년주" : p === "month" ? "월주" : p === "day" ? "일주" : "시주";
+                  const stemKey = p + "Stem";
+                  const branchKey = p + "Branch";
+                  return (
+                    <div key={p} className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold">{label}</span>
+                      <div className="p-2 rounded-lg bg-indigo-500/5 border border-indigo-500/20">
+                        <span className="text-indigo-300 font-medium">{tenGods[stemKey]}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-purple-500/5 border border-purple-500/20">
+                        <span className="text-purple-300 font-medium">{tenGods[branchKey]}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 합충형파해 + 신살 */}
+          {(interactions.length > 0 || divineKillers.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {interactions.length > 0 && (
+                <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+                  <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-amber-400" />
+                    합충형파해 ({interactions.length}건)
+                  </h3>
+                  <div className="space-y-2">
+                    {interactions.slice(0, 8).map((inter: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          inter.type.includes("합") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                          inter.type.includes("충") ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
+                          "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        }`}>
+                          {inter.type}
+                        </span>
+                        <span className="text-zinc-400">{inter.description || `${inter.involved?.join(" · ")}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {divineKillers.length > 0 && (
+                <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+                  <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400" />
+                    신살 ({divineKillers.length}건)
+                  </h3>
+                  <div className="space-y-2">
+                    {divineKillers.map((dk: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          dk.name.includes("귀인") ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" :
+                          "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        }`}>
+                          {dk.name}
+                        </span>
+                        <span className="text-zinc-400">{dk.description || `${dk.position} ${dk.branch}`}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
