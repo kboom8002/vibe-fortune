@@ -19,6 +19,16 @@ export default function SignInPage() {
     setError("");
 
     try {
+      // Check environment variables
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        setError("서버 환경 변수가 설정되지 않았습니다. 관리자에게 문의하세요.");
+        console.error("[Auth] Missing env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
+        return;
+      }
+
       const supabase = createClient();
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -26,28 +36,31 @@ export default function SignInPage() {
       });
 
       if (authError) {
+        console.error("[Auth] signIn error:", authError.message, authError.status);
         if (authError.message.includes("Invalid login credentials")) {
           setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         } else if (authError.message.includes("Email not confirmed")) {
           setError("이메일 인증이 완료되지 않았습니다. 메일함을 확인해 주세요.");
         } else {
-          setError(authError.message);
+          setError(`인증 오류: ${authError.message}`);
         }
         return;
       }
 
       if (data.session) {
-        // Save user info for app usage
         localStorage.setItem("user-session", JSON.stringify({
           userId: data.user.id,
           email: data.user.email,
         }));
         router.push("/app/daily");
         router.refresh();
+      } else {
+        setError("세션이 생성되지 않았습니다. 다시 시도해 주세요.");
       }
     } catch (err: unknown) {
+      console.error("[Auth] Unexpected error:", err);
       const message = err instanceof Error ? err.message : "로그인에 실패했습니다.";
-      setError(message);
+      setError(`연결 오류: ${message}`);
     } finally {
       setLoading(false);
     }
