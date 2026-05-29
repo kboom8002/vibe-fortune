@@ -34,6 +34,11 @@ export const ManseChartSchema = z.object({
     stem: HeavenlyStemSchema,
     element: FiveElementSchema,
     polarity: YinYangSchema,
+    strength: z.object({
+      score: z.number(),
+      judgment: z.enum(["strong", "weak", "balanced"]),
+    }).optional(),
+    yongSin: z.string().optional(),
   }),
   tenGods: z.record(z.string(), z.string()),
   hiddenStems: z.record(z.string(), z.array(z.string())),

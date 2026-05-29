@@ -25,6 +25,8 @@ import {
 import { ManseWarning } from "@/schemas/manse-chart.schema";
 import { ProvidedChartSchema } from "@/schemas/birth-profile.schema";
 import { z } from "zod";
+import { calculateDayMasterStrengthAndYongSin } from "./strength-yongsin";
+
 
 // Helper to format ISO datetime into target timezone parts
 function getLocalTimeParts(birthDateTime: string, timezone: string) {
@@ -134,24 +136,6 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
     const hourStem = eightChar.getTimeGan() as HeavenlyStem;
     const hourBranch = eightChar.getTimeZhi() as EarthlyBranch;
 
-    // 일간 (Day Master)
-    const dayMaster = {
-      stem: dayStem,
-      element: STEM_ELEMENTS[dayStem],
-      polarity: STEM_POLARITIES[dayStem],
-    };
-
-    // 십성 계산
-    const tenGods = {
-      yearStem: calculateTenGod(dayStem, yearStem),
-      yearBranch: calculateTenGod(dayStem, yearBranch as unknown as HeavenlyStem), // branch main element
-      monthStem: calculateTenGod(dayStem, monthStem),
-      monthBranch: calculateTenGod(dayStem, monthBranch as unknown as HeavenlyStem),
-      dayBranch: calculateTenGod(dayStem, dayBranch as unknown as HeavenlyStem),
-      hourStem: calculateTenGod(dayStem, hourStem),
-      hourBranch: calculateTenGod(dayStem, hourBranch as unknown as HeavenlyStem),
-    };
-
     // 지장간 매핑
     const hiddenStems = {
       yearBranch: HIDDEN_STEMS[yearBranch],
@@ -181,6 +165,34 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
       earth: Math.round(dist.earth * 10) / 10,
       metal: Math.round(dist.metal * 10) / 10,
       water: Math.round(dist.water * 10) / 10,
+    };
+
+    // 일간 (Day Master)
+    const strengthResult = calculateDayMasterStrengthAndYongSin(
+      STEM_ELEMENTS[dayStem],
+      fiveElementDistribution
+    );
+
+    const dayMaster = {
+      stem: dayStem,
+      element: STEM_ELEMENTS[dayStem],
+      polarity: STEM_POLARITIES[dayStem],
+      strength: {
+        score: strengthResult.score,
+        judgment: strengthResult.judgment,
+      },
+      yongSin: strengthResult.yongSin,
+    };
+
+    // 십성 계산
+    const tenGods = {
+      yearStem: calculateTenGod(dayStem, yearStem),
+      yearBranch: calculateTenGod(dayStem, yearBranch as unknown as HeavenlyStem), // branch main element
+      monthStem: calculateTenGod(dayStem, monthStem),
+      monthBranch: calculateTenGod(dayStem, monthBranch as unknown as HeavenlyStem),
+      dayBranch: calculateTenGod(dayStem, dayBranch as unknown as HeavenlyStem),
+      hourStem: calculateTenGod(dayStem, hourStem),
+      hourBranch: calculateTenGod(dayStem, hourBranch as unknown as HeavenlyStem),
     };
 
     const id = crypto.randomUUID();
@@ -410,5 +422,9 @@ export type { DivineKillerResult, DivineKillerType } from "./divine-killers";
 
 export { analyzeHiddenStems, analyzeHiddenStemsForBranch } from "./hidden-stems-analysis";
 export type { HiddenStemAnalysis, HiddenStemDetail } from "./hidden-stems-analysis";
+
+export { calculateDayMasterStrengthAndYongSin } from "./strength-yongsin";
+export { analyzePeriodInteractions } from "./period-interactions";
+
 
 

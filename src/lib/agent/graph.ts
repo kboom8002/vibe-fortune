@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { VibeFortuneAgentState } from "./state";
-import { calculateChart, calculateMajorLuck, checkChartConsistency } from "../manse";
+import { calculateChart, calculateMajorLuck, checkChartConsistency, analyzeDivineKillers, calculateAnnualLuck, analyzePeriodInteractions } from "../manse";
 import { tcoPackLoader } from "../tco/pack-loader";
 import { loadPrompt } from "./prompt-loader";
 import { llmProvider } from "@/lib/llm/provider";
 import { checkInputSafety, checkOutputSafety } from "@/lib/safety";
+import { getDbClient } from "@/lib/supabase/db";
+import { recomposeFromReceipts } from "./recomposition";
 
 // 1. InputIntakeNode
 export async function InputIntakeNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
@@ -72,12 +74,87 @@ export async function SafetyGateNode(state: VibeFortuneAgentState): Promise<Part
 // 3. LoadUserContextNode
 export async function LoadUserContextNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "LoadUserContextNode"];
-  return {
-    runtime: {
-      ...state.runtime,
-      nodeHistory: history,
-    },
-  };
+  const userId = state.userId || "local-user";
+
+  if (userId === "local-user") {
+    return {
+      runtime: {
+        ...state.runtime,
+        nodeHistory: history,
+      },
+    };
+  }
+
+  try {
+    const supabase = getDbClient();
+
+    // 1. Load birth profile if missing
+    let birthProfile = state.birthProfile;
+    if (!birthProfile) {
+      const { data: bp, error: bpError } = await supabase
+        .from("birth_profiles")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (bp && !bpError) {
+        birthProfile = {
+          id: bp.id,
+          userId: bp.user_id,
+          name: bp.name,
+          birthDateTime: bp.birth_datetime,
+          timezone: bp.timezone,
+          gender: bp.gender as any,
+          birthLocation: bp.birth_location || undefined,
+          providedChart: bp.provided_chart || undefined,
+          calculationPolicy: bp.calculation_policy,
+          createdAt: bp.created_at,
+          updatedAt: bp.updated_at,
+        };
+      }
+    }
+
+    // 2. Load recent run receipts (up to 7)
+    const { data: receipts, error: rError } = await supabase
+      .from("run_receipts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(7);
+
+    const recentRunReceipts = (receipts || []).map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      forecastOutputId: r.forecast_output_id,
+      whatIDid: r.what_i_did,
+      whyIChoseIt: r.why_i_chose_it,
+      whatAIHelped: r.what_ai_helped,
+      myJudgment: r.my_judgment,
+      whatIDeferred: r.what_i_deferred,
+      whatILearned: r.what_i_learned,
+      nextAction: r.next_action,
+      createdAt: r.created_at,
+    }));
+
+    return {
+      birthProfile,
+      recentRunReceipts,
+      runtime: {
+        ...state.runtime,
+        nodeHistory: history,
+      },
+    };
+  } catch (err) {
+    console.error("[LoadUserContextNode] Error loading context from database:", err);
+    return {
+      runtime: {
+        ...state.runtime,
+        nodeHistory: history,
+      },
+    };
+  }
 }
 
 // 4. BirthDataNormalizerNode
@@ -229,6 +306,47 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
   const history = [...(state.runtime?.nodeHistory || []), "ContextTensorBuilderNode"];
   const focus = state.input?.currentFocus || "business_finance";
 
+  // Recomposition feed-back loop
+  const riskAxis: string[] = [];
+  const intentAxis: string[] = [];
+  const evidenceAxis: string[] = [];
+
+  if (state.recentRunReceipts && state.recentRunReceipts.length > 0) {
+    try {
+      // Map RunReceiptSchema to RunReceiptEntry
+      const entries = state.recentRunReceipts.map(r => ({
+        id: r.id,
+        date: r.createdAt,
+        mode: "daily" as const,
+        grade: "A",
+        requiredActions: [r.whatIDid],
+        forbiddenActions: r.whatIDeferred ? [r.whatIDeferred] : [],
+        completedActions: [r.whatIDid],
+        vibeSnapshot: {
+          valence: state.vibeCheckIn?.valence || 5,
+          arousal: state.vibeCheckIn?.arousal || 5,
+          energy: state.vibeCheckIn?.energy || 5,
+          focus: state.vibeCheckIn?.focus || 5,
+          socialLoad: state.vibeCheckIn?.socialLoad || 5,
+        }
+      }));
+
+      const recomposed = recomposeFromReceipts(entries);
+
+      if (recomposed.recentTrend === "declining") {
+        riskAxis.push("declining_trend");
+      }
+      if (recomposed.completionRate < 0.5) {
+        intentAxis.push("reduce_scope");
+      }
+      recomposed.recurringPatterns.forEach(p => {
+        evidenceAxis.push(`recurring_pattern:${p}`);
+      });
+    } catch (err) {
+      console.warn("[ContextTensorBuilderNode] Failed to run recomposition:", err);
+    }
+  }
+
   const contextTensor = {
     id: crypto.randomUUID(),
     userId: state.userId,
@@ -241,15 +359,23 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
       focus: state.vibeCheckIn?.focus || 5,
       socialLoad: state.vibeCheckIn?.socialLoad || 5,
     },
-    riskAxis: [],
-    intentAxis: [],
-    evidenceAxis: [],
+    riskAxis,
+    intentAxis,
+    evidenceAxis,
     temporalAxis: {
       dailyLuck: state.chart?.pillars?.day?.label,
     },
     channelAxis: "daily_board" as const,
     createdAt: new Date().toISOString(),
   };
+
+  // Schema-First Rule: Validate the contextTensor using ContextTensorSchema
+  try {
+    const { ContextTensorSchema } = require("@/schemas/context-tensor.schema");
+    ContextTensorSchema.parse(contextTensor);
+  } catch (err) {
+    console.warn("[ContextTensorBuilderNode] Schema validation failed:", err);
+  }
 
   return {
     contextTensor,
@@ -356,23 +482,65 @@ export async function RiskVectorizerNode(state: VibeFortuneAgentState): Promise<
 
   const burnout = energy <= 3 ? 0.8 : 0.2;
 
+  // 1. Count ten gods occurrences
+  const tenGods = state.chart?.tenGods || {};
+  const tenGodsList = Object.values(tenGods);
+  const pyeonGwanCount = tenGodsList.filter(tg => tg === "편관").length;
+  const sangGwanCount = tenGodsList.filter(tg => tg === "상관").length;
+
+  // 2. Check divine killers
+  const killers = state.chart ? analyzeDivineKillers(state.chart) : [];
+  const hasDoHwa = killers.some(k => k.type === "도화살");
+  const hasYeokMa = killers.some(k => k.type === "역마살");
+
+  // 3. Check annual luck clash
+  let annualClash = false;
+  if (state.chart) {
+    try {
+      const targetYear = new Date().getFullYear();
+      const annualLuck = calculateAnnualLuck({ year: targetYear });
+      const clashes = analyzePeriodInteractions(state.chart, annualLuck.pillar, "annual");
+      annualClash = clashes.some(c => c.type === "clash");
+    } catch (e) {
+      console.warn("[RiskVectorizerNode] Failed to check annual clash:", e);
+    }
+  }
+
+  // 4. Calculate personalized risk scores
+  const cap = (val: number) => Math.min(1.0, Math.max(0.0, val));
+  
+  const baseOverextension = energy <= 4 ? 0.7 : 0.1;
+  const overextension = cap(baseOverextension + (hasYeokMa ? 0.1 : 0.0));
+  const scopeLeak = cap(0.1 + (annualClash ? 0.15 : 0.0));
+  const overclaim = cap(0.1 + (sangGwanCount >= 2 ? 0.15 : 0.0));
+  const emotionalOverreaction = cap(0.1 + (hasDoHwa ? 0.1 : 0.0));
+  const legalSafetyRisk = cap(0.1 + (pyeonGwanCount >= 2 ? 0.2 : 0.0));
+
   const riskVector = {
     id: crypto.randomUUID(),
     userId: state.userId,
     forecastRequestId: state.requestId,
-    overextension: energy <= 4 ? 0.7 : 0.1,
-    scopeLeak: 0.1,
-    overclaim: 0.1,
+    overextension,
+    scopeLeak,
+    overclaim,
     burnout,
     relationshipDryness: 0.1,
-    emotionalOverreaction: 0.1,
-    legalSafetyRisk: 0.1,
+    emotionalOverreaction,
+    legalSafetyRisk,
     missedOpportunity: 0.1,
     deterministicFortuneRisk: 0.1,
     relationshipManipulationRisk: 0.1,
     primaryRisk: burnout >= 0.6 ? ("burnout" as const) : ("overextension" as const),
     createdAt: new Date().toISOString(),
   };
+
+  // Schema-First Rule: Validate the riskVector using RiskVectorSchema
+  try {
+    const { RiskVectorSchema } = require("@/schemas/risk-vector.schema");
+    RiskVectorSchema.parse(riskVector);
+  } catch (err) {
+    console.warn("[RiskVectorizerNode] Schema validation failed:", err);
+  }
 
   return {
     riskVector,
@@ -663,16 +831,117 @@ export async function SafetyBoundaryReviewerNode(state: VibeFortuneAgentState): 
 // 15. PersistenceNode
 export async function PersistenceNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "PersistenceNode"];
+  const userId = state.userId || "local-user";
 
-  if (state.finalOutput) {
+  if (state.finalOutput && typeof window !== "undefined") {
     localStorage.setItem("last-generated-forecast", JSON.stringify(state.finalOutput));
   }
 
+  const persistenceIds = {
+    forecastRequestId: state.requestId,
+    contextTensorId: state.contextTensor?.id,
+    conceptStateId: state.conceptState?.id,
+    riskVectorId: state.riskVector?.id,
+    actionPolicyId: state.actionPolicy?.id,
+    forecastOutputId: state.finalOutput?.id,
+  };
+
+  // If authenticated user, write to remote Supabase DB
+  if (userId !== "local-user") {
+    try {
+      const supabase = getDbClient();
+
+      // 1. Upsert forecast request
+      if (state.birthProfile) {
+        await supabase.from("forecast_requests").upsert({
+          id: state.requestId,
+          user_id: userId,
+          mode: "daily",
+          target_date: new Date().toISOString().split("T")[0],
+          current_focus: state.contextTensor?.domainAxis || [],
+          user_message: state.input?.userMessage || null,
+          birth_profile_id: state.birthProfile.id,
+          vibe_checkin_id: state.vibeCheckIn?.id || null,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      // 2. Upsert context tensor
+      if (state.contextTensor) {
+        await supabase.from("context_tensors").upsert({
+          id: state.contextTensor.id,
+          user_id: userId,
+          forecast_request_id: state.requestId,
+          payload: state.contextTensor,
+          created_at: state.contextTensor.createdAt,
+        });
+      }
+
+      // 3. Upsert concept state
+      if (state.conceptState) {
+        await supabase.from("concept_states").upsert({
+          id: state.conceptState.id,
+          user_id: userId,
+          forecast_request_id: state.requestId,
+          payload: state.conceptState,
+          confidence: state.conceptState.confidence,
+          created_at: state.conceptState.createdAt,
+        });
+      }
+
+      // 4. Upsert risk vector
+      if (state.riskVector) {
+        await supabase.from("risk_vectors").upsert({
+          id: state.riskVector.id,
+          user_id: userId,
+          forecast_request_id: state.requestId,
+          payload: state.riskVector,
+          primary_risk: state.riskVector.primaryRisk,
+          created_at: state.riskVector.createdAt,
+        });
+      }
+
+      // 5. Upsert action policy
+      if (state.actionPolicy) {
+        await supabase.from("action_policies").upsert({
+          id: state.actionPolicy.id,
+          user_id: userId,
+          forecast_request_id: state.requestId,
+          mode: "daily",
+          payload: state.actionPolicy,
+          created_at: state.actionPolicy.createdAt,
+        });
+      }
+
+      // 6. Upsert forecast output
+      if (state.finalOutput) {
+        const { error } = await supabase.from("forecast_outputs").upsert({
+          id: state.finalOutput.id,
+          user_id: userId,
+          forecast_request_id: state.requestId,
+          mode: state.finalOutput.mode,
+          output_json: state.finalOutput.outputJson,
+          output_markdown: state.finalOutput.outputMarkdown,
+          grade: state.finalOutput.grade || "A",
+          context_tensor_id: state.contextTensor?.id || null,
+          concept_state_id: state.conceptState?.id || null,
+          risk_vector_id: state.riskVector?.id || null,
+          action_policy_id: state.actionPolicy?.id || null,
+          safety_flags: state.finalOutput.safetyFlags || [],
+          created_at: state.finalOutput.createdAt,
+        });
+
+        if (error) {
+          console.error("[PersistenceNode] Error saving forecast output to Supabase:", error);
+        }
+      }
+    } catch (err) {
+      console.error("[PersistenceNode] Unhandled persistence error:", err);
+    }
+  }
+
   return {
-    persistence: {
-      forecastRequestId: state.requestId,
-      forecastOutputId: (state.finalOutput as any)?.id,
-    },
+    persistence: persistenceIds,
     runtime: {
       ...state.runtime,
       nodeHistory: history,

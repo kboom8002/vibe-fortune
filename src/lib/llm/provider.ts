@@ -9,6 +9,17 @@ export interface LLMProvider {
   ): Promise<T>;
 }
 
+const MAX_RETRIES = 3;
+const BACKOFF_MS = [500, 1500, 4000];
+
+// State for Circuit Breaker
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class LLMProviderAdapter implements LLMProvider {
   private provider: "mock" | "openai";
   private apiKey?: string;
@@ -36,31 +47,55 @@ export class LLMProviderAdapter implements LLMProvider {
       return this.generateMockResponse(schema, fallback);
     }
 
-    try {
-      // Lazy load LangChain/OpenAI packages to avoid loading overhead when using mock
-      const { ChatOpenAI } = await import("@langchain/openai");
-      const { SystemMessage, HumanMessage } = await import("@langchain/core/messages");
-
-      const model = new ChatOpenAI({
-        openAIApiKey: this.apiKey,
-        modelName: this.modelName,
-        temperature: 0.2,
-      }).withStructuredOutput(schema);
-
-      const response = await model.invoke([
-        new SystemMessage(systemPrompt),
-        new HumanMessage(prompt),
-      ]);
-
-      return response as T;
-    } catch (err) {
-      console.error("[LLM Provider] OpenAI structured output failed. Using fallback.", err);
+    // Circuit Breaker Check
+    if (Date.now() < circuitOpenUntil) {
+      console.warn(`[LLM Provider] Circuit is OPEN until ${new Date(circuitOpenUntil).toISOString()}. Returning fallback directly.`);
       return fallback;
     }
+
+    // Lazy load LangChain/OpenAI packages to avoid loading overhead when using mock
+    const { ChatOpenAI } = await import("@langchain/openai");
+    const { SystemMessage, HumanMessage } = await import("@langchain/core/messages");
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        const model = new ChatOpenAI({
+          openAIApiKey: this.apiKey,
+          modelName: this.modelName,
+          temperature: 0.2,
+        }).withStructuredOutput(schema);
+
+        const response = await model.invoke([
+          new SystemMessage(systemPrompt),
+          new HumanMessage(prompt),
+        ]);
+
+        // Success: Reset circuit state
+        consecutiveFailures = 0;
+        return response as T;
+      } catch (err) {
+        console.warn(`[LLM Provider] Attempt ${i + 1} failed:`, err instanceof Error ? err.message : err);
+        
+        if (i === MAX_RETRIES - 1) {
+          // Last retry failed: increment failure counter
+          consecutiveFailures++;
+          if (consecutiveFailures >= 5) {
+            circuitOpenUntil = Date.now() + 600_000; // Open circuit for 10 minutes
+            console.error(`[LLM Provider] 5 consecutive failures reached. Circuit is now OPEN for 10 minutes.`);
+          }
+          console.error("[LLM Provider] OpenAI structured output failed after max retries. Using fallback.");
+          return fallback;
+        }
+
+        // Sleep with exponential backoff before retrying
+        await sleep(BACKOFF_MS[i]);
+      }
+    }
+
+    return fallback;
   }
 
   private generateMockResponse<T>(schema: z.ZodType<T>, fallback: T): T {
-    // Return fallback since it is structured correctly
     return fallback;
   }
 }
