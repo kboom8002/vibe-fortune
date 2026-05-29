@@ -1,0 +1,74 @@
+pack_id: operator_rules
+version: "0.2"
+description: "TCO-Vibe Action Policy generation operator rules"
+operators:
+  - id: op.fire_overheat_scope_lock
+    name: Fire Overheat Scope Lock
+    trigger:
+      active_concepts: [element.fire.expression]
+      risk_thresholds:
+        scopeLeak: 0.6
+      vibe_conditions:
+        arousal_min: 7
+      domains: [business_finance]
+    output_policy:
+      mode: Cleanup
+      warmthVsCompetence: Competence
+      requiredActions:
+        - 가격표 1p 작성
+        - 미포함 범위 5줄 작성
+        - 성과 비보장 문장 1개 삽입
+      forbiddenActions:
+        - 새 기능 착수
+        - 밤 10시 이후 제안서 발송
+        - 무제한 커스터마이징 약속
+      boundaryNotes:
+        - 성과를 보장하지 말고 실행 범위와 조건을 명시한다.
+    priority: 90
+    enabled: true
+
+  - id: op.low_energy_recovery_guard
+    name: Low Energy Recovery Guard
+    trigger:
+      risk_thresholds:
+        burnout: 0.6
+      vibe_conditions:
+        energy_max: 4
+        arousal_min: 6
+    output_policy:
+      mode: Recovery
+      warmthVsCompetence: Warmth
+      requiredActions:
+        - 20분 무입력 산책
+        - 큰 결정 24시간 보류
+        - 오늘의 작업 1개만 남기기
+      forbiddenActions:
+        - 새 프로젝트 착수
+        - 장문 메시지 발송
+        - 가격 양보 결정
+      boundaryNotes:
+        - 회복이 부족할 때 확장 행동을 미룬다.
+    priority: 100
+    enabled: true
+
+  - id: op.relationship_warmth_boundary
+    name: Relationship Warmth Boundary
+    trigger:
+      domains: [relationship_love]
+      risk_thresholds:
+        relationshipDryness: 0.5
+    output_policy:
+      mode: Consolidation
+      warmthVsCompetence: Warmth
+      requiredActions:
+        - 짧은 안부 메시지 1개
+        - 상대의 선택권을 명시하는 문장 사용
+        - 큰 서사는 작은 제안으로 낮추기
+      forbiddenActions:
+        - 관계를 프로젝트처럼 설명
+        - 상대를 설득하려는 장문 메시지
+        - 질투나 불안을 자극하는 행동
+      boundaryNotes:
+        - 상대방의 자율성과 거절 가능성을 존중한다.
+    priority: 95
+    enabled: true

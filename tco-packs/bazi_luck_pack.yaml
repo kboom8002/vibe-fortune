@@ -1,0 +1,40 @@
+pack_id: bazi_luck_pack
+version: "0.2"
+description: "오행·음양·운 주기를 행동 bias로 변환하는 기본 pack"
+concepts:
+  - id: element.wood.expansion
+    label: "목(木) 확장"
+    type: state
+    aliases: ["growth", "planning", "initiation"]
+    action_bias: ["planning", "growth", "initiation"]
+    risk_bias: ["overextension"]
+    boundary_notes: []
+  - id: element.fire.expression
+    label: "화(火) 표현"
+    type: state
+    aliases: ["visibility", "publishing", "pitching"]
+    action_bias: ["publishing", "pitching", "visibility"]
+    risk_bias: ["overclaim", "scope_leak"]
+    boundary_notes: ["성과 보장 표현 금지"]
+  - id: element.earth.stabilization
+    label: "토(土) 안정"
+    type: state
+    aliases: ["structure", "process", "review"]
+    action_bias: ["structuring", "review", "process"]
+    risk_bias: []
+    boundary_notes: []
+  - id: element.metal.boundary
+    label: "금(金) 경계"
+    type: state
+    aliases: ["pricing", "contract", "scope"]
+    action_bias: ["pricing", "contract", "scope", "deletion"]
+    risk_bias: []
+    boundary_notes: ["계약·범위·가격 경계 명확화"]
+  - id: element.water.recovery
+    label: "수(水) 회복"
+    type: state
+    aliases: ["rest", "reflection", "cooling"]
+    action_bias: ["rest", "reflection", "research", "cooling"]
+    risk_bias: ["missed_opportunity"]
+    boundary_notes: ["과도한 회피로 전환하지 않도록 최소 행동 유지"]
+operators: []

@@ -1,0 +1,26 @@
+pack_id: safety_boundary_pack
+version: "0.2"
+description: "금지 개념과 안전 경계 문구 pack"
+concepts:
+  - id: deterministic_prediction
+    label: "결정론적 예언"
+    type: risk
+    aliases: ["반드시", "무조건", "확정"]
+    action_bias: ["rewrite_as_prior"]
+    risk_bias: ["deterministicFortuneRisk"]
+    boundary_notes: ["운세는 구조적 prior이며 결과를 확정하지 않습니다."]
+  - id: relationship_manipulation
+    label: "관계 조작"
+    type: risk
+    aliases: ["상대를 움직이는 법", "질투 유발", "통제"]
+    action_bias: ["block_or_reframe"]
+    risk_bias: ["relationshipManipulationRisk"]
+    boundary_notes: ["관계 조언은 상대의 자율성과 선택권을 존중해야 합니다."]
+  - id: investment_guarantee
+    label: "투자 보장"
+    type: risk
+    aliases: ["수익 보장", "대박 확정"]
+    action_bias: ["add_professional_boundary"]
+    risk_bias: ["legalSafetyRisk"]
+    boundary_notes: ["투자 판단은 전문가와 상의해야 합니다."]
+operators: []

@@ -1,0 +1,33 @@
+pack_id: vibe_state_pack
+version: "0.2"
+description: "VibeCheckIn 값을 운영 상태 개념으로 변환하는 pack"
+concepts:
+  - id: vibe.high_arousal
+    label: "고각성"
+    type: state
+    aliases: ["흥분", "긴장", "속도 상승"]
+    action_bias: ["short_cycle", "boundary_check"]
+    risk_bias: ["overextension", "emotionalOverreaction"]
+    boundary_notes: ["밤 시간 장문 결정 금지"]
+  - id: vibe.low_energy
+    label: "저에너지"
+    type: state
+    aliases: ["피로", "무기력", "회복 필요"]
+    action_bias: ["recovery", "small_action"]
+    risk_bias: ["burnout"]
+    boundary_notes: ["새 프로젝트 착수 제한"]
+  - id: vibe.high_focus
+    label: "고집중"
+    type: state
+    aliases: ["몰입", "정렬"]
+    action_bias: ["execute", "finish"]
+    risk_bias: ["relationshipDryness"]
+    boundary_notes: ["관계 맥락에서는 warmth signal 추가"]
+  - id: vibe.high_social_load
+    label: "사회적 부하 높음"
+    type: risk
+    aliases: ["사람 피로", "관계 과부하"]
+    action_bias: ["social_downshift"]
+    risk_bias: ["burnout", "emotionalOverreaction"]
+    boundary_notes: ["관계 결론 지연"]
+operators: []

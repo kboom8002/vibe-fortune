@@ -1,0 +1,26 @@
+pack_id: recovery_health_pack
+version: "0.2"
+description: "회복·건강·저각성 리셋을 위한 안전한 일상 행동 pack"
+concepts:
+  - id: sleep_protection
+    label: "수면 보호"
+    type: action
+    aliases: ["잠", "회복"]
+    action_bias: ["sleep", "screen_reduction"]
+    risk_bias: []
+    boundary_notes: ["의학적 진단 금지"]
+  - id: silent_walk
+    label: "무입력 산책"
+    type: action
+    aliases: ["걷기", "회복 산책"]
+    action_bias: ["walk", "low_arousal_reset"]
+    risk_bias: []
+    boundary_notes: []
+  - id: decision_delay
+    label: "결정 지연"
+    type: action
+    aliases: ["24시간 보류", "판단 유예"]
+    action_bias: ["delay_big_decision"]
+    risk_bias: []
+    boundary_notes: ["고각성 상태에서 큰 결정 금지"]
+operators: []

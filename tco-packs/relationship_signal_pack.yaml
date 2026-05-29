@@ -1,0 +1,26 @@
+pack_id: relationship_signal_pack
+version: "0.2"
+description: "관계/연애/소통 맥락의 작은 신호와 자율성 보호 pack"
+concepts:
+  - id: warmth_signal
+    label: "따뜻한 신호"
+    type: action
+    aliases: ["안부", "작은 배려"]
+    action_bias: ["short_message", "non_pressure_signal"]
+    risk_bias: []
+    boundary_notes: ["상대 선택권 존중"]
+  - id: projectification_risk
+    label: "관계의 프로젝트화 위험"
+    type: risk
+    aliases: ["과기획", "관계 통제"]
+    action_bias: ["simplify", "warmth_first"]
+    risk_bias: ["relationshipDryness", "relationshipManipulationRisk"]
+    boundary_notes: ["설득·조작·압박 금지"]
+  - id: non_possessive_support
+    label: "비소유적 지지"
+    type: action
+    aliases: ["자율성 지지", "거리 존중"]
+    action_bias: ["support_without_pressure"]
+    risk_bias: []
+    boundary_notes: ["상대의 거절 가능성 명시"]
+operators: []

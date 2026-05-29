@@ -1,0 +1,57 @@
+prompts:
+  - prompt_id: system
+    version: 0.2.0
+    file: prompts/system.md
+    model_role: global_instruction
+    input_schema: none
+    output_schema: none
+    safety_class: S1
+    status: active
+  - prompt_id: concept_canonicalizer
+    version: 0.2.0
+    file: prompts/concept_canonicalizer.md
+    input_schema: ContextTensorSchema
+    output_schema: ConceptStateSchema
+    safety_class: S1
+    golden_tests: [QBS-D-001, QBS-W-001]
+    status: active
+  - prompt_id: risk_vectorizer
+    version: 0.2.0
+    file: prompts/risk_vectorizer.md
+    input_schema: RiskVectorizerInputSchema
+    output_schema: RiskVectorSchema
+    safety_class: S1
+    golden_tests: [QBS-D-001, QBS-S-001]
+    status: active
+  - prompt_id: policy_binder
+    version: 0.2.0
+    file: prompts/policy_binder.md
+    input_schema: PolicyBinderInputSchema
+    output_schema: ActionPolicySchema
+    safety_class: S1
+    golden_tests: [QBS-D-001, QBS-S-002]
+    status: active
+  - prompt_id: forecast_writer
+    version: 0.2.0
+    file: prompts/forecast_writer.md
+    input_schema: ForecastWriterInputSchema
+    output_schema: ForecastOutputSchema
+    safety_class: S1
+    golden_tests: [QBS-D-001, QBS-W-001, QBS-M-001]
+    status: active
+  - prompt_id: safety_reviewer
+    version: 0.2.0
+    file: prompts/safety_reviewer.md
+    input_schema: SafetyReviewInputSchema
+    output_schema: SafetyReviewOutputSchema
+    safety_class: S3
+    golden_tests: [SAFE-001, SAFE-002, SAFE-003]
+    status: active
+  - prompt_id: run_receipt_summarizer
+    version: 0.2.0
+    file: prompts/run_receipt_summarizer.md
+    input_schema: RecompositionInputSchema
+    output_schema: RecompositionSummarySchema
+    safety_class: S1
+    golden_tests: [RR-001, RR-002]
+    status: active

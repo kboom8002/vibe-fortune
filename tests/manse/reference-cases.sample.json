@@ -1,0 +1,45 @@
+[
+  {
+    "id": "CASE-0001",
+    "birthDateTime": "1990-05-01T14:30:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "庚午",
+      "monthPillar": "庚辰",
+      "dayPillar": "丙子",
+      "hourPillar": "乙未"
+    },
+    "source": "sample_placeholder_replace_with_verified_reference",
+    "notes": "샘플 형식용 케이스. 실제 릴리즈 전 검증된 참조값으로 교체한다."
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0001",
+    "birthDateTime": "1990-02-04T09:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun"
+    },
+    "source": "boundary_case_placeholder",
+    "notes": "입춘 경계 테스트 placeholder. 정확한 절기 시각 기준으로 expected pillar를 채워야 한다."
+  },
+  {
+    "id": "CASE-CONSISTENCY-0001",
+    "birthDateTime": "1985-10-10T23:30:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "unspecified",
+    "providedChart": {
+      "yearPillar": "乙丑",
+      "monthPillar": "丙戌"
+    },
+    "expected": {
+      "consistencyStatus": "mismatched_or_matched_based_on_calculation",
+      "warning": "GENDER_UNSPECIFIED"
+    },
+    "source": "consistency_case_placeholder",
+    "notes": "사용자 제공 사주와 계산 결과 비교 테스트용 placeholder."
+  }
+]

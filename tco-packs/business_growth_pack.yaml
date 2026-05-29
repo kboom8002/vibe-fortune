@@ -1,0 +1,33 @@
+pack_id: business_growth_pack
+version: "0.2"
+description: "비즈니스·매출·브랜딩 실행 정책을 위한 TCO pack"
+concepts:
+  - id: founder_proof
+    label: "창업자 증명"
+    type: evidence
+    aliases: ["founder credibility", "자기 증명"]
+    action_bias: ["case_pack", "authority_content"]
+    risk_bias: ["overclaim"]
+    boundary_notes: ["증거 없는 권위 주장 금지"]
+  - id: productized_sales
+    label: "상품화된 판매"
+    type: action
+    aliases: ["패키지 판매", "반복 판매"]
+    action_bias: ["price_table", "scope_table", "offer_page"]
+    risk_bias: ["scopeLeak"]
+    boundary_notes: ["무제한 커스터마이징 금지"]
+  - id: pricing_matrix
+    label: "가격표"
+    type: evidence
+    aliases: ["요금표", "패키지 표"]
+    action_bias: ["pricing_boundary"]
+    risk_bias: []
+    boundary_notes: []
+  - id: market_proof
+    label: "시장 증거"
+    type: evidence
+    aliases: ["구매 증거", "고객 반응"]
+    action_bias: ["customer_case", "pilot"]
+    risk_bias: ["overclaim"]
+    boundary_notes: ["시장 증거와 빌드 증거를 구분"]
+operators: []
