@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -12,22 +13,55 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
+
+    if (password.length < 6) {
+      setError("비밀번호는 최소 6자리 이상이어야 합니다.");
+      setLoading(false);
+      return;
+    }
 
     try {
-      // Simulate or execute Supabase local registration
-      document.cookie = "sb-access-token=mock-token; path=/; max-age=86400";
-      document.cookie = "sb-user-id=local-user; path=/; max-age=86400";
-      
-      localStorage.setItem("user-session", JSON.stringify({ userId: "local-user", email, name }));
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { display_name: name },
+        },
+      });
 
-      router.push("/app/onboarding");
-    } catch (err: any) {
-      setError(err.message || "회원가입에 실패했습니다.");
+      if (authError) {
+        if (authError.message.includes("already registered")) {
+          setError("이미 등록된 이메일입니다. 로그인을 시도해 주세요.");
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      if (data.user && !data.session) {
+        // Email confirmation required
+        setSuccess("인증 메일이 발송되었습니다. 메일함을 확인하고 인증 링크를 클릭해 주세요.");
+      } else if (data.session) {
+        // Auto-confirmed (e.g. email confirmation disabled)
+        localStorage.setItem("user-session", JSON.stringify({
+          userId: data.user!.id,
+          email: data.user!.email,
+          name,
+        }));
+        router.push("/app/onboarding");
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "회원가입에 실패했습니다.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,8 +83,17 @@ export default function SignUpPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs text-red-400 text-center">
+          <div role="alert" className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs text-red-400 text-center">
             {error}
+          </div>
+        )}
+
+        {success && (
+          <div role="status" className="p-4 bg-emerald-950/40 border border-emerald-900/50 rounded-lg text-sm text-emerald-400 text-center space-y-2">
+            <p className="font-medium">✅ {success}</p>
+            <Link href="/auth/sign-in" className="text-xs text-indigo-400 hover:text-indigo-300 inline-block">
+              로그인 페이지로 이동 →
+            </Link>
           </div>
         )}
 

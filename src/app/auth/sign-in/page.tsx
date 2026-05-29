@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -18,17 +19,35 @@ export default function SignInPage() {
     setError("");
 
     try {
-      // Simulate or execute Supabase local login
-      // For MVP local first, we write a cookie to simulate authentication
-      document.cookie = "sb-access-token=mock-token; path=/; max-age=86400";
-      document.cookie = "sb-user-id=local-user; path=/; max-age=86400";
-      
-      // Save user session in localStorage
-      localStorage.setItem("user-session", JSON.stringify({ userId: "local-user", email }));
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      router.push("/app/daily");
-    } catch (err: any) {
-      setError(err.message || "로그인에 실패했습니다.");
+      if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+        } else if (authError.message.includes("Email not confirmed")) {
+          setError("이메일 인증이 완료되지 않았습니다. 메일함을 확인해 주세요.");
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      if (data.session) {
+        // Save user info for app usage
+        localStorage.setItem("user-session", JSON.stringify({
+          userId: data.user.id,
+          email: data.user.email,
+        }));
+        router.push("/app/daily");
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "로그인에 실패했습니다.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -50,7 +69,7 @@ export default function SignInPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs text-red-400 text-center">
+          <div role="alert" className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs text-red-400 text-center">
             {error}
           </div>
         )}
