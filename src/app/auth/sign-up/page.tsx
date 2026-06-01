@@ -56,8 +56,15 @@ export default function SignUpPage() {
           email: data.user!.email,
           name,
         }));
-        router.push("/app/onboarding");
-        router.refresh();
+
+        // Set auth cookie so server middleware can detect authenticated state
+        const tokenData = JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        document.cookie = `sb-auth-token=${btoa(tokenData)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
+        window.location.href = "/app/onboarding";
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "회원가입에 실패했습니다.";

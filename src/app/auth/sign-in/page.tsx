@@ -23,20 +23,27 @@ export default function SignInPage() {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+      console.log("[Auth] Env check:", {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseKey,
+        urlPrefix: supabaseUrl?.substring(0, 30),
+      });
+
       if (!supabaseUrl || !supabaseKey) {
         setError("서버 환경 변수가 설정되지 않았습니다. 관리자에게 문의하세요.");
-        console.error("[Auth] Missing env vars:", { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
         return;
       }
 
       const supabase = createClient();
+
+      console.log("[Auth] Attempting signInWithPassword for:", email);
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (authError) {
-        console.error("[Auth] signIn error:", authError.message, authError.status);
+        console.error("[Auth] signIn error:", authError.message, authError.status, JSON.stringify(authError));
         if (authError.message.includes("Invalid login credentials")) {
           setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         } else if (authError.message.includes("Email not confirmed")) {
@@ -47,13 +54,30 @@ export default function SignInPage() {
         return;
       }
 
+      console.log("[Auth] signIn success:", {
+        hasSession: !!data.session,
+        userId: data.user?.id,
+        email: data.user?.email,
+      });
+
       if (data.session) {
+        // Store user session info for client-side usage
+        const userName = data.user?.user_metadata?.display_name || data.user?.email?.split("@")[0] || "사용자";
         localStorage.setItem("user-session", JSON.stringify({
           userId: data.user.id,
           email: data.user.email,
+          name: userName,
         }));
-        router.push("/app/daily");
-        router.refresh();
+
+        // Set auth cookie so server middleware can detect authenticated state
+        const tokenData = JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        document.cookie = `sb-auth-token=${btoa(tokenData)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
+        // Use hard redirect to ensure middleware picks up new auth cookies
+        window.location.href = "/app/daily";
       } else {
         setError("세션이 생성되지 않았습니다. 다시 시도해 주세요.");
       }
