@@ -12,24 +12,112 @@ export default function MonthlyPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/forecast/monthly");
+        const month = new Date().toISOString().substring(0, 7);
+
+        const res = await fetch("/api/forecast/monthly", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ month }),
+        });
+
         if (res.ok) {
-          setData(await res.json());
+          const apiData = await res.json();
+          if (apiData.forecastOutput) {
+            const fo = apiData.forecastOutput;
+            const mapped = {
+              conclusion: fo.oneLineConclusion || fo.conclusion || "",
+              conceptPortfolio: (fo.monthlyConceptPortfolio || []).map((c: string, i: number) => ({
+                name: c.split("(")[0]?.trim() || c,
+                weight: i === 0 ? 0.4 : 0.3,
+                state: c.toLowerCase().includes("consolidation") ? "consolidation" : c.toLowerCase().includes("expansion") ? "expansion" : "cleanup",
+              })),
+              riskPortfolio: (fo.monthlyRiskPortfolio || []).map((r: string) => ({
+                domain: r.split(" ")[0] || "일반",
+                level: "medium",
+                note: r,
+              })),
+              threePillars: {
+                revenue: { score: 65, advice: (fo.revenuePolicy || [])[0] || "기존 매출원 최적화" },
+                relationship: { score: 55, advice: (fo.relationshipPolicy || [])[0] || "핵심 관계에 집중" },
+                recovery: { score: 75, advice: (fo.recoveryPolicy || [])[0] || "규칙적 운동과 수면" },
+              },
+              actionCalendar: (fo.monthlyActionCalendar || []).map((w: any) => ({
+                week: w.week,
+                focus: w.recommendedFocus || "",
+              })),
+            };
+            localStorage.setItem("monthly-forecast-cache", JSON.stringify(mapped));
+            setData(mapped);
+          } else {
+            generateLocalMonthly();
+          }
         } else {
-          const cached = localStorage.getItem("monthly-forecast-cache");
-          if (cached) setData(JSON.parse(cached));
-          else setError("월간 분석 데이터를 불러올 수 없습니다.");
+          generateLocalMonthly();
         }
       } catch {
-        const cached = localStorage.getItem("monthly-forecast-cache");
-        if (cached) setData(JSON.parse(cached));
-        else setError("서버 연결에 실패했습니다. 나중에 다시 시도해 주세요.");
+        generateLocalMonthly();
       } finally {
         setLoading(false);
       }
     };
+
+    const generateLocalMonthly = () => {
+      const cached = localStorage.getItem("monthly-forecast-cache");
+      if (cached) {
+        setData(JSON.parse(cached));
+        return;
+      }
+
+      // Use stored chart for personalized data
+      const storedChart = localStorage.getItem("user-manse-chart");
+      let dmElement = "토";
+      if (storedChart) {
+        try { dmElement = JSON.parse(storedChart).dayMaster?.element || "토"; } catch { /* */ }
+      }
+      const elementMap: Record<string, string> = { "木": "목성(木)", "火": "화성(火)", "土": "토성(土)", "金": "금성(金)", "水": "수성(水)", "목": "목성(木)", "화": "화성(火)", "토": "토성(土)", "금": "금성(金)", "수": "수성(水)" };
+
+      const monthlyData = {
+        conclusion: `이번 달은 ${elementMap[dmElement] || "토성(土)"}의 영향으로 내면 탐색과 전략 수립에 적합합니다. 대외적 확장보다 내실 다지기에 집중하세요.`,
+        conceptPortfolio: [
+          { name: "재정비", weight: 0.4, state: "cleanup" },
+          { name: "학습", weight: 0.3, state: "expansion" },
+          { name: "관계정리", weight: 0.3, state: "consolidation" },
+        ],
+        riskPortfolio: [
+          { domain: "재무", level: "medium", note: "불필요한 지출 모니터링 필요" },
+          { domain: "건강", level: "low", note: "수면 패턴 안정적" },
+          { domain: "관계", level: "high", note: "핵심 관계 재정립 시점" },
+        ],
+        threePillars: {
+          revenue: { score: 65, advice: "보수적 운영, 기존 매출원 최적화" },
+          relationship: { score: 45, advice: "핵심 인맥 3인에 집중, 확장 자제" },
+          recovery: { score: 80, advice: "규칙적 수면과 주 2회 운동 유지" },
+        },
+        actionCalendar: [
+          { week: "1주차", focus: "현황 진단 및 데이터 수집" },
+          { week: "2주차", focus: "핵심 프로젝트 정리 및 우선순위 재설정" },
+          { week: "3주차", focus: "관계 재정립 미팅 및 소통" },
+          { week: "4주차", focus: "월간 회고 및 다음 달 전략 수립" },
+        ],
+      };
+      localStorage.setItem("monthly-forecast-cache", JSON.stringify(monthlyData));
+      setData(monthlyData);
+    };
+
     fetchData();
   }, []);
+
+  const mockData = data || {
+    conclusion: "",
+    conceptPortfolio: [],
+    riskPortfolio: [],
+    threePillars: {
+      revenue: { score: 0, advice: "" },
+      relationship: { score: 0, advice: "" },
+      recovery: { score: 0, advice: "" },
+    },
+    actionCalendar: [],
+  };
 
   if (loading) {
     return (
@@ -41,31 +129,6 @@ export default function MonthlyPage() {
       </div>
     );
   }
-
-  const mockData = data || {
-    conclusion: "이번 달은 수성(水)의 영향으로 내면 탐색과 전략 수립에 적합합니다. 대외적 확장보다 내실 다지기에 집중하세요.",
-    conceptPortfolio: [
-      { name: "재정비", weight: 0.4, state: "cleanup" },
-      { name: "학습", weight: 0.3, state: "expansion" },
-      { name: "관계정리", weight: 0.3, state: "consolidation" },
-    ],
-    riskPortfolio: [
-      { domain: "재무", level: "medium", note: "불필요한 지출 모니터링 필요" },
-      { domain: "건강", level: "low", note: "수면 패턴 안정적" },
-      { domain: "관계", level: "high", note: "핵심 관계 재정립 시점" },
-    ],
-    threePillars: {
-      revenue: { score: 65, advice: "보수적 운영, 기존 매출원 최적화" },
-      relationship: { score: 45, advice: "핵심 인맥 3인에 집중, 확장 자제" },
-      recovery: { score: 80, advice: "규칙적 수면과 주 2회 운동 유지" },
-    },
-    actionCalendar: [
-      { week: "1주차", focus: "현황 진단 및 데이터 수집" },
-      { week: "2주차", focus: "핵심 프로젝트 정리 및 우선순위 재설정" },
-      { week: "3주차", focus: "관계 재정립 미팅 및 소통" },
-      { week: "4주차", focus: "월간 회고 및 다음 달 전략 수립" },
-    ],
-  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">

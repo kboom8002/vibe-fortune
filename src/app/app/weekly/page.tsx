@@ -12,24 +12,107 @@ export default function WeeklyPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/forecast/weekly");
+        const now = new Date();
+        const from = now.toISOString().split("T")[0];
+        const toDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const to = toDate.toISOString().split("T")[0];
+
+        const res = await fetch("/api/forecast/weekly", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from, to, currentFocus: ["business_finance"] }),
+        });
+
         if (res.ok) {
-          setData(await res.json());
+          const apiData = await res.json();
+          if (apiData.forecastOutput) {
+            const fo = apiData.forecastOutput;
+            const mapped = {
+              conclusion: fo.oneLineConclusion || fo.conclusion || "",
+              coreConcept: { name: "정리", state: fo.weeklyCoreConcept || "consolidation", confidence: 0.82 },
+              gapAnalysis: fo.weeklyPrimaryGap || "",
+              targets: {
+                evidence: [fo.weeklyEvidenceTarget || "핵심 과제 2건 완료"],
+                boundary: [fo.weeklyBoundaryTarget || "과도한 야근 주의"],
+                conversion: [fo.weeklyConversionTarget || "아이디어를 실행 계획으로 전환"],
+              },
+              riskTrajectory: [
+                { day: "월", level: "low" }, { day: "화", level: "medium" }, { day: "수", level: "medium" },
+                { day: "목", level: "high" }, { day: "금", level: "medium" }, { day: "토", level: "low" }, { day: "일", level: "low" },
+              ],
+              actionPolicy: {
+                required: fo.actionPolicy?.requiredActions || ["기존 프로젝트 마감 우선"],
+                forbidden: fo.actionPolicy?.forbiddenActions || ["신규 대규모 투자 결정"],
+              },
+              reflection: fo.recompositionGoal || "지난 주 보류했던 의사결정 중, 이번 주에 처리할 수 있는 것은 무엇인가요?",
+            };
+            localStorage.setItem("weekly-forecast-cache", JSON.stringify(mapped));
+            setData(mapped);
+          } else {
+            generateLocalWeekly();
+          }
         } else {
-          const cached = localStorage.getItem("weekly-forecast-cache");
-          if (cached) setData(JSON.parse(cached));
-          else setError("주간 분석 데이터를 불러올 수 없습니다.");
+          generateLocalWeekly();
         }
       } catch {
-        const cached = localStorage.getItem("weekly-forecast-cache");
-        if (cached) setData(JSON.parse(cached));
-        else setError("서버 연결에 실패했습니다. 나중에 다시 시도해 주세요.");
+        generateLocalWeekly();
       } finally {
         setLoading(false);
       }
     };
+
+    const generateLocalWeekly = () => {
+      // Use stored chart for personalized fallback
+      const storedChart = localStorage.getItem("user-manse-chart");
+      let dmInfo = "토(earth)";
+      if (storedChart) {
+        try {
+          const chart = JSON.parse(storedChart);
+          dmInfo = `${chart.dayMaster?.stem || ""}(${chart.dayMaster?.element || "토"})`;
+        } catch { /* ignore */ }
+      }
+
+      const cached = localStorage.getItem("weekly-forecast-cache");
+      if (cached) {
+        setData(JSON.parse(cached));
+        return;
+      }
+
+      const weeklyData = {
+        conclusion: `이번 주는 일간 ${dmInfo}의 기류 아래, 확장보다는 정리와 점검에 적합한 주간입니다. 충동적 결정을 유보하고, 기존 프로젝트의 완결도를 높이는 데 집중하세요.`,
+        coreConcept: { name: "정리", state: "consolidation", confidence: 0.82 },
+        gapAnalysis: "근거(Evidence) 확보 수준이 낮습니다. 데이터 기반 의사결정을 강화하세요.",
+        targets: {
+          evidence: ["고객 피드백 3건 이상 수집", "경쟁사 분석 리포트 업데이트"],
+          boundary: ["과도한 야근 주의", "SNS 노출 최소화"],
+          conversion: ["리드 2건 → 미팅 전환", "제안서 1건 발송"],
+        },
+        riskTrajectory: [
+          { day: "월", level: "low" }, { day: "화", level: "medium" }, { day: "수", level: "medium" },
+          { day: "목", level: "high" }, { day: "금", level: "medium" }, { day: "토", level: "low" }, { day: "일", level: "low" },
+        ],
+        actionPolicy: {
+          required: ["기존 프로젝트 마감 우선", "데이터 백업 및 정리"],
+          forbidden: ["신규 대규모 투자 결정", "감정적 대응 (특히 목요일)"],
+        },
+        reflection: "지난 주 보류했던 의사결정 중, 이번 주에 처리할 수 있는 것은 무엇인가요?",
+      };
+      localStorage.setItem("weekly-forecast-cache", JSON.stringify(weeklyData));
+      setData(weeklyData);
+    };
+
     fetchData();
   }, []);
+
+  const mockData = data || {
+    conclusion: "",
+    coreConcept: { name: "", state: "consolidation", confidence: 0 },
+    gapAnalysis: "",
+    targets: { evidence: [], boundary: [], conversion: [] },
+    riskTrajectory: [],
+    actionPolicy: { required: [], forbidden: [] },
+    reflection: "",
+  };
 
   if (loading) {
     return (
@@ -41,31 +124,6 @@ export default function WeeklyPage() {
       </div>
     );
   }
-
-  const mockData = data || {
-    conclusion: "이번 주는 확장보다는 정리와 점검에 적합한 주간입니다. 충동적 결정을 유보하고, 기존 프로젝트의 완결도를 높이는 데 집중하세요.",
-    coreConcept: { name: "정리", state: "consolidation", confidence: 0.82 },
-    gapAnalysis: "근거(Evidence) 확보 수준이 낮습니다. 데이터 기반 의사결정을 강화하세요.",
-    targets: {
-      evidence: ["고객 피드백 3건 이상 수집", "경쟁사 분석 리포트 업데이트"],
-      boundary: ["과도한 야근 주의", "SNS 노출 최소화"],
-      conversion: ["리드 2건 → 미팅 전환", "제안서 1건 발송"],
-    },
-    riskTrajectory: [
-      { day: "월", level: "low" },
-      { day: "화", level: "medium" },
-      { day: "수", level: "medium" },
-      { day: "목", level: "high" },
-      { day: "금", level: "medium" },
-      { day: "토", level: "low" },
-      { day: "일", level: "low" },
-    ],
-    actionPolicy: {
-      required: ["기존 프로젝트 마감 우선", "데이터 백업 및 정리"],
-      forbidden: ["신규 대규모 투자 결정", "감정적 대응 (특히 목요일)"],
-    },
-    reflection: "지난 주 보류했던 의사결정 중, 이번 주에 처리할 수 있는 것은 무엇인가요?",
-  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">

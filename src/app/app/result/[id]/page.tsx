@@ -137,11 +137,30 @@ export default function ForecastResultPage() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.forecastOutput) {
-          setForecast(data.forecastOutput);
-          localStorage.setItem("last-generated-forecast", JSON.stringify(data.forecastOutput));
+        const fo = data.forecastOutput;
+        if (fo) {
+          // Map API response (outputJson/outputMarkdown/grade) to UI fields
+          const outputJson = fo.outputJson || fo;
+          const mappedForecast = {
+            summary: outputJson.summary || outputJson.oneLineConclusion || fo.outputMarkdown?.substring(0, 200) || "",
+            conceptState: outputJson.conceptState || outputJson.coreConcept || "consolidation",
+            conceptStateDescription: outputJson.conceptStateDescription || outputJson.conceptExplanation || "",
+            actionPolicyExplanation: outputJson.actionPolicyExplanation || outputJson.actionExplanation || "",
+            grade: outputJson.grade || fo.grade || "A",
+            requiredActions: outputJson.requiredActions || outputJson.actionPolicy?.requiredActions || [],
+            forbiddenActions: outputJson.forbiddenActions || outputJson.actionPolicy?.forbiddenActions || [],
+            deferredActions: outputJson.deferredActions || outputJson.actionPolicy?.deferredActions || [],
+            boundaryNotes: outputJson.boundaryNotes || outputJson.safetyNotes || [],
+          };
+
+          // If essential fields are still empty, use local fallback to fill gaps
+          if (!mappedForecast.summary || mappedForecast.requiredActions.length === 0) {
+            generateLocalForecast(chartResult, vibeData);
+          } else {
+            setForecast(mappedForecast);
+            localStorage.setItem("last-generated-forecast", JSON.stringify(mappedForecast));
+          }
         } else {
-          // API 성공했지만 output이 없을 때 fallback
           generateLocalForecast(chartResult, vibeData);
         }
       } else {
