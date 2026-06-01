@@ -7,6 +7,8 @@ import { llmProvider } from "@/lib/llm/provider";
 import { checkInputSafety, checkOutputSafety } from "@/lib/safety";
 import { getDbClient } from "@/lib/supabase/db";
 import { recomposeFromReceipts } from "./recomposition";
+import { buildRAGContext, formatRAGContextForPrompt } from "./rag-context";
+import { determineVibeTuneProfile, rewriteWithVibeTune } from "./vibe-rewriter";
 
 // 1. InputIntakeNode
 export async function InputIntakeNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
@@ -684,6 +686,28 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
     const systemPrompt = loadPrompt("system");
     const forecastPrompt = loadPrompt("forecast_writer");
 
+    // --- TCO Pack Context (domain knowledge injection) ---
+    let tcoPackContext = "";
+    try {
+      tcoPackContext = tcoPackLoader.loadTCOPackContextForLLM();
+    } catch (err) {
+      console.warn("[ForecastWriterNode] TCO pack context load failed:", err);
+    }
+
+    // --- RAG Context (personal history injection) ---
+    let ragContextStr = "";
+    try {
+      const ragCtx = buildRAGContext({
+        recentForecasts: (state as any).recentForecasts || [],
+        recentVibes: (state as any).recentVibes || [],
+        recentReceipts: (state as any).recentReceipts || [],
+        chart: state.chart,
+      });
+      ragContextStr = formatRAGContextForPrompt(ragCtx);
+    } catch (err) {
+      console.warn("[ForecastWriterNode] RAG context build failed:", err);
+    }
+
     // Build comprehensive context for the LLM forecast writer
     const contextForLLM = [
       forecastPrompt,
@@ -694,6 +718,9 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
       `Month Pillar: ${state.chart?.pillars?.month?.label || "unknown"}`,
       `Day Pillar: ${state.chart?.pillars?.day?.label || "unknown"}`,
       `Hour Pillar: ${state.chart?.pillars?.hour?.label || "unknown"}`,
+      "",
+      "--- Five Element Distribution ---",
+      state.chart?.fiveElementDistribution ? Object.entries(state.chart.fiveElementDistribution).map(([el, ct]) => `${el}: ${ct}`).join(", ") : "not available",
       "",
       "--- Vibe Check-In ---",
       `Valence: ${state.vibeCheckIn?.valence ?? 5}`,
@@ -706,6 +733,8 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
       `Core Concept: ${state.conceptState?.coreConceptState || "unknown"}`,
       `Active Concepts: ${state.conceptState?.activeConcepts?.join(", ") || "none"}`,
       `Concept Gaps: ${state.conceptState?.conceptGaps?.join(", ") || "none"}`,
+      `Evidence Gaps: ${state.conceptState?.evidenceGaps?.join(", ") || "none"}`,
+      `Boundary Gaps: ${state.conceptState?.boundaryGaps?.join(", ") || "none"}`,
       "",
       "--- Risk Vector ---",
       `Primary Risk: ${state.riskVector?.primaryRisk || "unknown"}`,
@@ -725,8 +754,14 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
       "--- Safety Flags ---",
       state.safetyFlags?.length ? state.safetyFlags.map(f => `[${f.type}] ${f.message}`).join("\n") : "none",
       "",
-      "Generate a forecast output with: summary, conceptStateDescription, actionPolicyExplanation, and outputMarkdown.",
+      tcoPackContext ? "--- TCO 개념 팩 ---\n" + tcoPackContext : "",
+      "",
+      ragContextStr ? "--- 사용자 이력 컨텍스트 ---\n" + ragContextStr : "",
+      "",
+      "Generate a forecast output with: summary, conceptStateDescription, actionPolicyExplanation, vibeInterpretation, riskNarrative, reflectionQuestion, and outputMarkdown.",
       "The outputMarkdown should be user-facing Korean text in rich markdown format.",
+      "Include 6대 영역 (사업/돈, 관계/애정, 건강/회복, 학습/글쓰기, 브랜딩/평판, 리스크/안전) 간단 전망.",
+      "Include 회고 질문 and 실행 기록 안내.",
       "Do NOT produce deterministic predictions. Use structural prior language.",
     ].join("\n");
 
@@ -777,6 +812,47 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
       nodeHistory: history,
     },
   };
+}
+
+// 13.5 VibeTuneRewriterNode
+export async function VibeTuneRewriterNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
+  const history = [...(state.runtime?.nodeHistory || []), "VibeTuneRewriterNode"];
+
+  // Skip if no draft output or no vibe data
+  if (!state.draftOutput || !state.vibeCheckIn) {
+    return {
+      runtime: { ...state.runtime, nodeHistory: history },
+    };
+  }
+
+  try {
+    const vibeData = {
+      energy: state.vibeCheckIn.energy ?? 5,
+      valence: state.vibeCheckIn.valence ?? 5,
+      arousal: state.vibeCheckIn.arousal ?? 5,
+      focus: state.vibeCheckIn.focus ?? 5,
+      socialLoad: state.vibeCheckIn.socialLoad ?? 5,
+    };
+
+    const profile = determineVibeTuneProfile(vibeData, state.chart?.dayMaster);
+    console.log(`[VibeTuneRewriterNode] Tone: ${profile.toneMode}, Intensity: ${profile.intensityLevel}, Element: ${profile.elementMetaphor}`);
+
+    const rewritten = await rewriteWithVibeTune(
+      state.draftOutput as Record<string, unknown>,
+      profile,
+      llmProvider,
+    );
+
+    return {
+      draftOutput: rewritten as any,
+      runtime: { ...state.runtime, nodeHistory: history },
+    };
+  } catch (err) {
+    console.warn("[VibeTuneRewriterNode] VibeTune rewrite failed, keeping original:", err instanceof Error ? err.message : err);
+    return {
+      runtime: { ...state.runtime, nodeHistory: history },
+    };
+  }
 }
 
 // 14. SafetyBoundaryReviewerNode
@@ -980,6 +1056,7 @@ export async function runAgentWorkflow(initialState: VibeFortuneAgentState): Pro
     OperatorExecutorNode,
     PolicyBinderNode,
     ForecastWriterNode,
+    VibeTuneRewriterNode,     // NEW: Tone rewriting based on vibe state
     SafetyBoundaryReviewerNode,
     PersistenceNode,
     FinalResponseNode,

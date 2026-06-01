@@ -24,6 +24,7 @@ const PROMPT_FILE_MAP: Record<string, string> = {
   forecast_writer: "forecast_writer.md",
   safety_reviewer: "safety_reviewer.md",
   run_receipt_summarizer: "run_receipt_summarizer.md",
+  vibe_rewriter: "vibe_rewriter.md",
 };
 
 /**
