@@ -60,15 +60,30 @@ export default function ForecastResultPage() {
 
     // 1. 사주 차트 즉시 계산 (결정론적)
     try {
-      const birthDate = profileData.birthDate || "1990-01-01";
-      const birthTime = profileData.birthTime || "12:00";
-      const chartResult = calculateChart({
-        birthDateTime: birthDate + "T" + birthTime + ":00",
-        timezone: profileData.timezone || "Asia/Seoul",
-        gender: profileData.gender || "male",
-      });
+      // First try to load pre-calculated chart from localStorage
+      const storedChart = localStorage.getItem("user-manse-chart");
+      let chartResult;
+      
+      if (storedChart) {
+        chartResult = JSON.parse(storedChart);
+      } else {
+        // Calculate from birth profile — handle both data formats
+        // Onboarding stores `birthDateTime` (full ISO string)
+        let birthDateTimeStr = profileData.birthDateTime;
+        if (!birthDateTimeStr) {
+          const birthDate = profileData.birthDate || "1990-01-01";
+          const birthTime = profileData.birthTime || "12:00";
+          birthDateTimeStr = `${birthDate}T${birthTime}:00`;
+        }
+        chartResult = calculateChart({
+          birthDateTime: birthDateTimeStr,
+          timezone: profileData.timezone || "Asia/Seoul",
+          gender: profileData.gender || "male",
+        });
+        localStorage.setItem("user-manse-chart", JSON.stringify(chartResult));
+      }
+      
       setChart(chartResult);
-      localStorage.setItem("user-manse-chart", JSON.stringify(chartResult));
 
       // 대운 계산
       try {

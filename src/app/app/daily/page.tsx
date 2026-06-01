@@ -42,11 +42,29 @@ export default function DailyPage() {
         timestamp: new Date().toISOString(),
       };
 
-      const chartResult = profile?.chartResult || calculateChart({
-        birthDateTime: profile.birthDate + "T" + (profile.birthTime || "12:00") + ":00",
-        timezone: profile.timezone || "Asia/Seoul",
-        gender: profile.gender || "male",
-      });
+      // Try to get chart from stored chart first, then calculate
+      let chartResult;
+      const storedChart = localStorage.getItem("user-manse-chart");
+      if (storedChart) {
+        chartResult = JSON.parse(storedChart);
+      } else if (profile?.chartResult) {
+        chartResult = profile.chartResult;
+      } else {
+        // Calculate from birth profile — handle both data formats
+        // Onboarding stores `birthDateTime` (full ISO string)
+        // Fallback: try `birthDate` + `birthTime` (legacy format)
+        let birthDateTimeStr = profile?.birthDateTime;
+        if (!birthDateTimeStr) {
+          const bd = profile?.birthDate || "1990-01-01";
+          const bt = profile?.birthTime || "12:00";
+          birthDateTimeStr = `${bd}T${bt}:00`;
+        }
+        chartResult = calculateChart({
+          birthDateTime: birthDateTimeStr,
+          timezone: profile?.timezone || "Asia/Seoul",
+          gender: profile?.gender || "male",
+        });
+      }
 
       const requestId = `daily-${Date.now()}`;
       const forecastRequest = {
@@ -57,10 +75,13 @@ export default function DailyPage() {
 
       localStorage.setItem("last-forecast-request", JSON.stringify(forecastRequest));
       localStorage.setItem("last-vibe-checkin", JSON.stringify(vibeCheckIn));
+      localStorage.setItem("user-manse-chart", JSON.stringify(chartResult));
       router.push(`/app/result/${requestId}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "분석 요청 중 오류가 발생했습니다.";
       setError(message);
+      // Scroll to top so user can see the error
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
     }
