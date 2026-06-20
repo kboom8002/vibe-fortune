@@ -113,6 +113,37 @@ export default function WeeklyPage() {
       };
       localStorage.setItem("weekly-forecast-cache", JSON.stringify(weeklyData));
       setData(weeklyData);
+
+      // Local richOutput for weekly
+      const storedChartForRich = localStorage.getItem("user-manse-chart");
+      const chart = storedChartForRich ? JSON.parse(storedChartForRich) : null;
+      if (chart) {
+        const dm = chart.dayMaster;
+        setRichData({
+          gapAnalysis: {
+            conceptGaps: ['이번 주 핵심 프로젝트의 중간 점검이 필요합니다'],
+            evidenceGaps: ['주간 성과 기록을 정리하여 다음 주 계획에 반영하세요'],
+            boundaryGaps: ['업무와 개인 시간의 경계를 명확히 하세요'],
+            conversionGaps: ['이번 주 계획을 구체적 행동 항목 3개로 전환하세요'],
+          },
+          vibePrescription: {
+            homomorphic: {
+              element: dm?.element === '목' || dm?.element === '木' ? 'wood' : dm?.element === '화' || dm?.element === '火' ? 'fire' : 'earth',
+              label: '이번 주 기운을 증폭하는 처방',
+              rationale: `일간 ${dm?.stem || '?'}(${dm?.element || '?'})의 에너지와 조화하여 이번 주의 핵심 흐름을 극대화하세요.`,
+              actions: ['주간 핵심 과제 1개 정의', '매일 15분 성찰 시간 확보'],
+              sensory: { color: '일간 친화 색상', light: '자연광', space: '집중 가능한 공간', rhythm: '집중 음악', ritual: '주 시작 계획 세우기' },
+            },
+            complementary: {
+              element: 'water',
+              label: '부족한 기운을 보충하는 처방',
+              rationale: '유연성과 회복의 에너지를 보충하여 주간 피로를 관리하세요.',
+              actions: ['주 중 1회 가벼운 산책', '충분한 수분 섭취'],
+              sensory: { color: '남색', light: '간접 조명', space: '조용한 공간', rhythm: '잔잔한 음악', ritual: '주말 리셋 시간' },
+            },
+          },
+        });
+      }
     };
 
     fetchData();

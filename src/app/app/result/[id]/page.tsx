@@ -223,6 +223,199 @@ export default function ForecastResultPage() {
     }
   };
 
+  // 로컬 richOutput 생성 (6대 영역, GAP 분석, Vibe 처방 — 결정론적)
+  const generateLocalRichOutput = (chartResult: any, vibeData: any) => {
+    const dm = chartResult.dayMaster;
+    const elementProfile = chartResult.elementProfile || chartResult.fiveElementDistribution || {};
+    const energy = vibeData?.energy ?? 5;
+    const focus = vibeData?.focus ?? 5;
+    const valence = vibeData?.valence ?? 5;
+
+    // 1. Generate gapAnalysis from 오행 imbalance
+    const elements = ['목', '화', '토', '금', '수'];
+    const elementCounts: Record<string, number> = {};
+    for (const el of elements) {
+      elementCounts[el] = (elementProfile[el] as number) || 0;
+    }
+    const totalCount = Object.values(elementCounts).reduce((a, b) => a + b, 0) || 8;
+    const avgCount = totalCount / 5;
+
+    const conceptGaps: string[] = [];
+    const evidenceGaps: string[] = [];
+    const boundaryGaps: string[] = [];
+    const conversionGaps: string[] = [];
+
+    // Weak elements → concept gaps
+    for (const [el, count] of Object.entries(elementCounts)) {
+      if (count < avgCount * 0.6) {
+        const elNames: Record<string, string> = { '목': '성장·확장', '화': '표현·열정', '토': '안정·체계', '금': '결단·정리', '수': '유연·축적' };
+        conceptGaps.push(`${el}(${elNames[el] || el}) 기운이 약합니다 — ${elNames[el]} 영역의 의식적 강화가 필요합니다`);
+      }
+    }
+
+    // Vibe-based gaps
+    if (energy < 4) evidenceGaps.push('활력이 낮은 상태 — 충분한 수면과 가벼운 운동으로 에너지 회복이 우선입니다');
+    if (focus < 4) evidenceGaps.push('집중력이 분산된 상태 — 짧은 타이머 집중법(25분)으로 몰입 패턴을 만들어보세요');
+    if (valence < 4) boundaryGaps.push('기분이 낮은 상태 — 과도한 의사결정을 피하고 작은 성취에 집중하세요');
+    if (energy >= 7 && focus >= 7) conversionGaps.push('높은 에너지와 집중력 — 지금이 핵심 프로젝트를 진전시킬 최적의 타이밍입니다');
+    if (vibeData?.socialLoad > 7) boundaryGaps.push('사회적 부하가 높습니다 — 혼자만의 시간을 확보하여 재충전하세요');
+
+    // Default gaps if none generated
+    if (conceptGaps.length === 0) conceptGaps.push('전반적인 오행 균형이 양호합니다 — 현재 리듬을 유지하세요');
+    if (conversionGaps.length === 0) conversionGaps.push('오늘의 행동 정책을 구체적인 1개 실행 항목으로 전환하세요');
+
+    // 2. Generate domainForecasts (6 domains, deterministic from chart)
+    const domainElement: Record<string, string> = {
+      business_finance: dm?.element === '목' || dm?.element === '木' || dm?.element === 'wood' ? 'wood' : dm?.element === '금' || dm?.element === '金' || dm?.element === 'metal' ? 'metal' : 'earth',
+      relationship_love: dm?.element === '화' || dm?.element === '火' || dm?.element === 'fire' ? 'fire' : 'wood',
+      health_recovery: 'water',
+      learning_writing_research: dm?.element === '수' || dm?.element === '水' || dm?.element === 'water' ? 'water' : 'wood',
+      reputation_branding: 'fire',
+      risk_legal_safety: 'metal',
+    };
+
+    const domainNarratives: Record<string, { headline: string; narrative: string; requiredActions: string[]; forbiddenActions: string[] }> = {
+      business_finance: {
+        headline: `${dm?.stem || '?'}${dm?.element === 'wood' || dm?.element === '목' ? '의 성장 기운이 사업 확장을 지지합니다' : '의 기운 아래 재정 안정에 집중하는 날'}`,
+        narrative: `일간 ${dm?.stem || '?'}(${dm?.element || '?'})의 에너지가 사업·재정 영역에 작용하고 있습니다. ${energy >= 6 ? '현재 활력이 충분하여 새로운 비즈니스 기회를 탐색하기 좋은 조건입니다. 핵심 프로젝트의 진전을 위해 오전 시간대를 활용하세요.' : '에너지 레벨이 보통 이하이므로 새로운 투자나 계약보다는 기존 업무의 완결에 집중하는 것이 유리합니다.'} 용신 ${dm?.yongSin || '?'} 기운이 강해지는 시간대에 중요 의사결정을 배치하면 보다 나은 결과를 기대할 수 있습니다. 오행의 흐름에 따라 체계적인 계획 수립이 오늘의 핵심 전략입니다.`,
+        requiredActions: ['핵심 업무 1가지를 정의하고 완결하기', '재정 현황 5분 점검'],
+        forbiddenActions: ['사전 조율 없는 대규모 투자 결정'],
+      },
+      relationship_love: {
+        headline: `관계에 ${valence >= 6 ? '따뜻한 온기를 불어넣을' : '조용한 성찰이 필요한'} 시간`,
+        narrative: `오늘의 인간관계 영역은 ${valence >= 6 ? '긍정적인 정서 에너지가 흐르고 있어 소통과 교류에 적합합니다. 중요한 사람에게 짧은 안부를 전하거나, 가벼운 만남을 통해 관계의 질을 높이세요.' : '정서적 에너지가 다소 낮으므로 깊은 대화보다는 가벼운 접촉에 머무르는 것이 현명합니다. 혼자만의 시간을 통해 내면을 돌보는 것도 관계 건강의 일부입니다.'} 일간 ${dm?.stem || '?'}의 기운이 대인관계에서 ${dm?.strength?.judgment === 'strong' ? '주도적인 역할' : '수용적인 자세'}로 나타날 수 있습니다. 상대의 자율성을 존중하면서 자연스러운 교류를 이어가세요.`,
+        requiredActions: ['중요한 사람에게 짧은 안부 1개', '경청 연습 — 상대 말에 2초 더 귀 기울이기'],
+        forbiddenActions: ['감정적 장문 메시지 발송'],
+      },
+      health_recovery: {
+        headline: `${energy < 5 ? '회복과 재충전이 우선인' : '활력을 유지하며 건강을 다지는'} 날`,
+        narrative: `현재 에너지 레벨(${energy}/10)을 기준으로 ${energy < 5 ? '회복 모드에 진입하는 것이 바람직합니다. 무리한 운동보다는 가벼운 스트레칭이나 산책으로 몸의 기운 순환을 돕고, 충분한 수면을 확보하세요. 수(水) 기운을 보충하여 몸과 마음의 유연성을 회복하는 데 집중하세요.' : '건강 유지를 위한 적극적인 활동이 가능합니다. 규칙적인 식사와 적절한 운동으로 현재의 좋은 컨디션을 이어가세요. 다만 과도한 체력 소모는 피하고, 에너지 배분을 의식적으로 관리하세요.'} 오행의 균형 속에서 몸의 신호에 귀 기울이는 것이 장기 건강의 핵심입니다.`,
+        requiredActions: [energy < 5 ? '7시간 이상 수면 확보' : '30분 규칙적 운동', '물 2리터 이상 섭취'],
+        forbiddenActions: [energy < 5 ? '야근 및 과도한 체력 소모' : '수면 부족한 상태에서 고강도 운동'],
+      },
+      learning_writing_research: {
+        headline: `${focus >= 6 ? '깊은 몰입이 가능한 학습의' : '가벼운 탐색으로 시작하는'} 날`,
+        narrative: `인지 집중도(${focus}/10)가 ${focus >= 6 ? '높아 깊은 학습이나 창작 작업에 적합합니다. 목(木)과 수(水)의 성장·축적 에너지를 활용하여 현재 진행 중인 프로젝트의 핵심 부분을 진전시키세요. 25분 집중 + 5분 휴식의 포모도로 기법이 효과적입니다.' : '보통 수준이므로 새로운 주제 탐색이나 가벼운 리서치부터 시작하는 것이 좋습니다. 무리한 장시간 학습보다 짧은 집중 블록을 여러 번 활용하세요.'} 일간 ${dm?.stem || '?'}의 에너지와 학습 영역의 조화를 통해 지식 축적의 기반을 다질 수 있습니다.`,
+        requiredActions: [focus >= 6 ? '핵심 프로젝트 1시간 집중 블록' : '관심 분야 15분 리서치', '학습 내용 3줄 요약 기록'],
+        forbiddenActions: ['무관한 SNS 30분 이상 탐색'],
+      },
+      reputation_branding: {
+        headline: `${energy >= 6 && valence >= 6 ? '존재감을 드러낼' : '조용히 실력을 쌓을'} 시간`,
+        narrative: `브랜딩·평판 영역에서 화(火)와 금(金)의 기운이 작용합니다. ${energy >= 6 && valence >= 6 ? '현재 에너지와 정서 상태가 양호하여 자기 표현과 대외 활동에 적합합니다. 그동안의 성과를 정리하여 공유하거나, 전문성을 드러낼 수 있는 콘텐츠를 작성해 보세요.' : '내면의 실력 축적에 집중하는 것이 장기적으로 더 효과적입니다. 증거 없는 자기 홍보보다 구체적인 성과물을 만드는 데 에너지를 쓰세요.'} 일간 ${dm?.stem || '?'}의 에너지 흐름에 맞춰 자연스러운 전문가 포지셔닝을 이어가세요.`,
+        requiredActions: ['포트폴리오 또는 성과 기록 1건 업데이트', '전문 분야 인사이트 1개 정리'],
+        forbiddenActions: ['과장된 자기소개 또는 미검증 성과 주장'],
+      },
+      risk_legal_safety: {
+        headline: `${energy < 4 || valence < 4 ? '신중한 판단이 필요한' : '리스크를 점검하고 정리하는'} 시간`,
+        narrative: `리스크·안전 영역에서 금(金)과 수(水)의 기운이 경계와 점검을 요청합니다. ${energy < 4 || valence < 4 ? '에너지가 낮은 상태에서의 중요 계약이나 법적 결정은 피하는 것이 현명합니다. 오늘은 기존 리스크를 점검하고 정리하는 데 집중하세요.' : '전반적으로 안정된 상태이므로 미결 사항을 정리하고, 재정·법적 서류를 점검하는 데 적합합니다.'} 충동적 결정을 자제하고 24시간 보류 원칙을 적용하면 불필요한 리스크를 줄일 수 있습니다. 중요한 결정은 전문가와 상의하세요.`,
+        requiredActions: ['미결 서류/계약 1건 검토', '재정 지출 내역 5분 점검'],
+        forbiddenActions: ['충동적 대규모 투자 결정', '법적 문서 서명 시 전문가 상담 없이 진행'],
+      },
+    };
+
+    const domainForecasts = Object.entries(domainNarratives).map(([domain, data]) => ({
+      domain,
+      headline: data.headline,
+      narrative: data.narrative,
+      elementInfluence: domainElement[domain] || 'earth',
+      activatedConcepts: [],
+      riskLevel: energy < 4 && domain === 'risk_legal_safety' ? 'high' : energy < 5 ? 'medium' : 'low',
+      policyMode: energy < 4 ? 'Recovery' : energy >= 7 ? 'Expansion' : 'Consolidation',
+      requiredActions: data.requiredActions,
+      forbiddenActions: data.forbiddenActions,
+    }));
+
+    // 3. Generate vibePrescription (deterministic)
+    const normalizeEl = (el?: string): string => {
+      if (!el) return 'earth';
+      const map: Record<string, string> = { '목': 'wood', '木': 'wood', '화': 'fire', '火': 'fire', '토': 'earth', '土': 'earth', '금': 'metal', '金': 'metal', '수': 'water', '水': 'water' };
+      return map[el] || el.toLowerCase();
+    };
+
+    const dmEl = normalizeEl(dm?.element);
+    const yongSinEl = normalizeEl(dm?.yongSin);
+    const homoEl = yongSinEl || dmEl || 'earth';
+
+    // Find weakest element
+    const elKeys = ['목', '화', '토', '금', '수'];
+    let weakest = '수';
+    let minVal = Infinity;
+    for (const k of elKeys) {
+      const v = (elementProfile[k] as number) || 0;
+      if (v < minVal) { minVal = v; weakest = k; }
+    }
+    const compEl = normalizeEl(weakest);
+
+    const SENSORY: Record<string, Record<string, string>> = {
+      wood: { color: '초록·연두', light: '아침 햇살', space: '식물이 있는 공간', rhythm: '경쾌한 어쿠스틱', ritual: '새벽 산책', scent: '페퍼민트' },
+      fire: { color: '빨강·주황', light: '따뜻한 조명', space: '활기찬 카페', rhythm: '에너제틱한 팝', ritual: '감사 일기', scent: '시나몬' },
+      earth: { color: '베이지·황토', light: '자연광', space: '정돈된 공간', rhythm: '잔잔한 클래식', ritual: '루틴 고수', scent: '샌달우드' },
+      metal: { color: '흰색·실버', light: '선명한 조명', space: '미니멀 공간', rhythm: '앰비언트', ritual: '정리 시간', scent: '유칼립투스' },
+      water: { color: '남색·검정', light: '간접 조명', space: '조용한 서재', rhythm: '로파이·재즈', ritual: '취침 전 일기', scent: '라벤더' },
+    };
+
+    const EL_LABELS: Record<string, { homo: string; comp: string; homoR: string; compR: string; actions: string[] }> = {
+      wood: {
+        homo: '성장의 씨앗을 틔우는 처방', comp: '뿌리를 내리는 보충 처방',
+        homoR: `목(木)의 성장 에너지가 일간의 기운과 조화를 이룹니다. 새로운 시도와 확장의 기운을 증폭시켜 현재의 상승 흐름을 활용하세요. 창의적 아이디어를 실행에 옮기기에 적합합니다.`,
+        compR: `목(木)의 기운이 부족합니다. 성장과 확장의 에너지를 보충하면 정체를 타개하고 새로운 돌파구를 찾을 수 있습니다.`,
+        actions: ['새로운 아이디어 3개 적기', '아침 스트레칭', '식물 공간에서 사색', '새 프로젝트 첫 단계'],
+      },
+      fire: {
+        homo: '열정의 불꽃을 피우는 처방', comp: '온기를 불어넣는 보충 처방',
+        homoR: `화(火)의 열정 에너지가 활발합니다. 표현력과 리더십을 키워 추진력을 극대화하세요.`,
+        compR: `화(火) 기운이 약해 활력이 저하되어 있습니다. 따뜻함과 열정을 보충하면 무기력함을 벗어날 수 있습니다.`,
+        actions: ['감사 메시지 보내기', '30분 운동', '성과 공유', '밝은 옷 입기'],
+      },
+      earth: {
+        homo: '단단한 기반을 다지는 처방', comp: '흔들리는 토대를 강화하는 처방',
+        homoR: `토(土)의 안정 에너지로 체계적 정리와 구조화를 통해 안정감을 공고히 하세요.`,
+        compR: `토(土) 기운이 약해 불안정합니다. 안정과 체계의 에너지를 보충하면 기반을 다잡을 수 있습니다.`,
+        actions: ['할 일 목록 정리', '공간 정돈', '규칙적 식사', '5분 명상'],
+      },
+      metal: {
+        homo: '날카로운 결단의 처방', comp: '선명한 윤곽을 그리는 처방',
+        homoR: `금(金)의 결단 에너지가 작용합니다. 불필요한 것을 정리하고 핵심에 집중하세요.`,
+        compR: `금(金) 기운이 부족하여 판단력이 흐려져 있습니다. 결단의 에너지를 보충하세요.`,
+        actions: ['미결 사항 1개 결정', '정리 15분', '불필요한 약속 정리', '핵심 업무 집중'],
+      },
+      water: {
+        homo: '깊은 흐름을 따르는 처방', comp: '메마른 곳에 물을 대는 처방',
+        homoR: `수(水)의 유연한 에너지가 흐릅니다. 깊은 사색과 연구로 이 기운을 활용하세요.`,
+        compR: `수(水) 기운이 약하여 유연성이 저하되어 있습니다. 물의 에너지를 보충하세요.`,
+        actions: ['20분 독서', '물 2L 섭취', '저녁 산책', '새 관점 탐색'],
+      },
+    };
+
+    const homoData = EL_LABELS[homoEl] || EL_LABELS.earth;
+    const compData = EL_LABELS[compEl] || EL_LABELS.water;
+
+    const vibePrescription = {
+      homomorphic: {
+        element: homoEl,
+        label: homoData.homo,
+        rationale: homoData.homoR,
+        actions: homoData.actions,
+        sensory: SENSORY[homoEl] || SENSORY.earth,
+      },
+      complementary: {
+        element: compEl,
+        label: compData.comp,
+        rationale: compData.compR,
+        actions: compData.actions,
+        sensory: SENSORY[compEl] || SENSORY.water,
+      },
+    };
+
+    return {
+      gapAnalysis: { conceptGaps, evidenceGaps, boundaryGaps, conversionGaps },
+      domainForecasts,
+      vibePrescription,
+      structuralPriorSummary: `일간 ${dm?.stem || '?'}(${dm?.element || '?'})${dm?.strength?.judgment === 'strong' ? '은 강한 자기 주도력의 기반을 갖추고 있습니다' : '은 유연한 협력과 적응력이 핵심 자산입니다'}. 용신 ${dm?.yongSin || '?'} 기운의 활용이 오늘의 핵심 전략입니다.`,
+      vibeSummary: `에너지(${energy}/10)${energy >= 6 ? '가 충분하고' : '가 보충이 필요하며'} 집중력(${focus}/10)${focus >= 6 ? '이 높아 실행에 적합합니다' : '이 낮아 짧은 집중 블록이 효과적입니다'}. 정서(${valence}/10)${valence >= 6 ? '가 안정적이어서 대인 교류에 유리합니다' : '가 낮아 내면 돌봄이 우선입니다'}.`,
+    };
+  };
+
   // LLM 없이도 사주 기반 로컬 포캐스트 생성
   const generateLocalForecast = (chartResult: any, vibeData: any) => {
     const dm = chartResult.dayMaster;
@@ -266,6 +459,10 @@ export default function ForecastResultPage() {
       socialLoad: vibeData?.socialLoad ?? 5,
     });
     setForecastId(forecastIdStr || "local-forecast-id");
+
+    // Generate local richOutput for new panels
+    const localRichOutput = generateLocalRichOutput(chartResult, vibeData);
+    setRichOutput(localRichOutput);
   };
 
   const handleFeedbackSubmit = async () => {

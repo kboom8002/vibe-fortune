@@ -3,6 +3,18 @@ import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Clock, Star, TrendingUp, User, Target, ArrowRight } from "lucide-react";
 
+const ELEMENT_COLORS: Record<string, { bar: string; text: string; bg: string }> = {
+  wood: { bar: "bg-emerald-500", text: "text-emerald-400", bg: "bg-emerald-500/10" },
+  fire: { bar: "bg-rose-500", text: "text-rose-400", bg: "bg-rose-500/10" },
+  earth: { bar: "bg-amber-500", text: "text-amber-400", bg: "bg-amber-500/10" },
+  metal: { bar: "bg-zinc-300", text: "text-zinc-300", bg: "bg-zinc-300/10" },
+  water: { bar: "bg-blue-500", text: "text-blue-400", bg: "bg-blue-500/10" },
+};
+
+const ELEMENT_LABELS: Record<string, string> = {
+  wood: "목(木)", fire: "화(火)", earth: "토(土)", metal: "금(金)", water: "수(水)",
+};
+
 export default function LifetimePage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -18,12 +30,11 @@ export default function LifetimePage() {
           return;
         }
         const profile = JSON.parse(storedProfile);
-        const birthProfileId = profile.id || profile.birthProfileId || "local";
 
         const res = await fetch("/api/forecast/lifetime", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ birthProfileId }),
+          body: JSON.stringify({ birthProfile: profile }),
         });
 
         if (res.ok) {
@@ -76,6 +87,8 @@ export default function LifetimePage() {
         keyTheme: `${lifeCyclePhase} 전략적 포지셔닝`,
         strategicAdvice: `용신 ${dm.yongSin || "?"} 기운을 강화하는 환경과 역할을 선택하는 것이 생애 전체적으로 가장 중요한 전략입니다.`,
       },
+      fiveElementDistribution: chart.fiveElementDistribution,
+      dayMaster: chart.dayMaster,
     };
   }
 
@@ -106,6 +119,10 @@ export default function LifetimePage() {
     );
   }
 
+  // Compute max value for ohaeng bar chart scaling
+  const dist = data?.fiveElementDistribution;
+  const distMax = dist ? Math.max(...Object.values(dist).map((v: any) => Number(v) || 0), 1) : 1;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">
       <Navbar />
@@ -121,6 +138,39 @@ export default function LifetimePage() {
             </h1>
             <p className="text-sm text-zinc-400">생애 전체의 기운 흐름과 전략적 포지셔닝을 확인합니다.</p>
           </div>
+
+          {/* 오행 분포 */}
+          {dist && (
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
+                <span className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-blue-400 inline-block" />
+                오행 분포
+              </h2>
+              <div className="space-y-3">
+                {(["wood", "fire", "earth", "metal", "water"] as const).map((el) => {
+                  const count = Number(dist[el]) || 0;
+                  const pct = distMax > 0 ? Math.round((count / distMax) * 100) : 0;
+                  const colors = ELEMENT_COLORS[el];
+                  const isDayMaster = data?.dayMaster?.element === el;
+                  return (
+                    <div key={el} className="flex items-center gap-3">
+                      <div className={`w-16 text-xs font-semibold ${colors.text} flex items-center gap-1`}>
+                        {ELEMENT_LABELS[el]}
+                        {isDayMaster && <span className="text-[10px] text-zinc-500">(일간)</span>}
+                      </div>
+                      <div className="flex-1 h-3 bg-zinc-800/60 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${colors.bar} rounded-full transition-all duration-1000 ease-out`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="w-6 text-xs text-zinc-500 text-right">{count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Lifetime Narrative */}
           {data?.lifetimeNarrative && (
@@ -164,15 +214,38 @@ export default function LifetimePage() {
               </h2>
               <div className="flex gap-4 overflow-x-auto pb-4">
                 {data.decadeTimeline.map((decade: any, i: number) => (
-                  <div key={i} className="flex-shrink-0 w-56 p-5 rounded-2xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-3">
-                    <div className="text-xs text-zinc-500 font-semibold uppercase">{decade.ageRange}</div>
+                  <div
+                    key={i}
+                    className={`flex-shrink-0 w-56 p-5 rounded-2xl backdrop-blur-md space-y-3 transition-all ${
+                      decade.isCurrent
+                        ? "bg-indigo-950/50 border-2 border-indigo-500/60 ring-2 ring-indigo-500/20 shadow-lg shadow-indigo-500/10"
+                        : "bg-zinc-900/30 border border-zinc-800/80"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-zinc-500 font-semibold uppercase">{decade.ageRange}</div>
+                      {decade.isCurrent && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
+                          현재
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm font-bold text-zinc-200">{decade.theme || decade.pillar?.label}</div>
+                    <div className="text-xs text-zinc-500">{decade.pillar?.label}</div>
                     <p className="text-xs text-zinc-400 leading-relaxed">{decade.narrative}</p>
                     {decade.opportunities && (
                       <div>
                         <div className="text-xs text-emerald-400 font-semibold mb-1">기회</div>
                         {decade.opportunities.slice(0, 2).map((o: string, j: number) => (
                           <div key={j} className="text-xs text-zinc-500">• {o}</div>
+                        ))}
+                      </div>
+                    )}
+                    {decade.challenges && (
+                      <div>
+                        <div className="text-xs text-amber-400 font-semibold mb-1">과제</div>
+                        {decade.challenges.slice(0, 2).map((c: string, j: number) => (
+                          <div key={j} className="text-xs text-zinc-500">• {c}</div>
                         ))}
                       </div>
                     )}

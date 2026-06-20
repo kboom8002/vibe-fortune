@@ -116,6 +116,37 @@ export default function MonthlyPage() {
       };
       localStorage.setItem("monthly-forecast-cache", JSON.stringify(monthlyData));
       setData(monthlyData);
+
+      // Local richOutput for monthly
+      const storedChartForRich = localStorage.getItem("user-manse-chart");
+      const chartForRich = storedChartForRich ? JSON.parse(storedChartForRich) : null;
+      if (chartForRich) {
+        const dm = chartForRich.dayMaster;
+        setRichData({
+          gapAnalysis: {
+            conceptGaps: ['이번 달 전략적 우선순위 재검토가 필요합니다'],
+            evidenceGaps: ['월간 목표 달성률을 중간 점검하세요'],
+            boundaryGaps: ['이번 달 새로 맡은 역할의 범위를 명확히 하세요'],
+            conversionGaps: ['이번 달 핵심 목표를 주별 실행 계획으로 분해하세요'],
+          },
+          vibePrescription: {
+            homomorphic: {
+              element: dm?.element === '목' || dm?.element === '木' ? 'wood' : 'earth',
+              label: '이번 달 핵심 기운을 키우는 처방',
+              rationale: `일간 ${dm?.stem || '?'}(${dm?.element || '?'})의 월간 에너지 흐름에 맞춰 핵심 역량을 강화하세요.`,
+              actions: ['월간 핵심 목표 1개 설정', '매주 진척 기록'],
+              sensory: { color: '일간 친화 색상', light: '안정적 조명', space: '체계적 환경', rhythm: '집중 음악', ritual: '월초 계획 세션' },
+            },
+            complementary: {
+              element: 'water',
+              label: '이번 달 회복 에너지를 확보하는 처방',
+              rationale: '한 달간의 지속 가능성을 위해 회복과 유연성의 에너지를 보충하세요.',
+              actions: ['주 1회 완전한 휴식일 확보', '월 1회 새로운 경험'],
+              sensory: { color: '남색·검정', light: '간접 조명', space: '자연 속 공간', rhythm: '힐링 사운드', ritual: '월말 성찰 시간' },
+            },
+          },
+        });
+      }
     };
 
     fetchData();
