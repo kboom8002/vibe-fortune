@@ -523,17 +523,17 @@ export default function ForecastResultPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">
       <Navbar />
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-900/10 blur-glow pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/10 blur-glow pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-900/10 blur-glow pointer-events-none" aria-hidden="true" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/10 blur-glow pointer-events-none" aria-hidden="true" />
 
-      <main className="py-12 px-6 flex-1">
+      <main className="py-12 px-6 flex-1" role="main" aria-label="운세 결과">
         <ErrorBoundary fallbackMessage="운세 결과를 표시하는 중 오류가 발생했습니다. 새로고침하거나 다시 진단해주세요.">
         <div className="max-w-4xl w-full mx-auto space-y-8 relative z-10">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800/80 pb-6">
             <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <h1 id="heading-daily-board" className="text-2xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                 일일 운영 보드
               </h1>
               <p className="text-xs text-zinc-400">
@@ -541,8 +541,8 @@ export default function ForecastResultPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Link href="/app/daily" className={cn(buttonVariants({ variant: "outline" }), "border-zinc-800 hover:bg-zinc-900/50 text-zinc-300 gap-2")}>
-                <RotateCcw className="w-4 h-4" /> 다시 진단
+              <Link href="/app/daily" aria-label="바이브 체크인을 다시 진단합니다" className={cn(buttonVariants({ variant: "outline" }), "border-zinc-800 hover:bg-zinc-900/50 text-zinc-300 gap-2")}>
+                <RotateCcw className="w-4 h-4" aria-hidden="true" /> 다시 진단
               </Link>
             </div>
           </div>
@@ -556,9 +556,9 @@ export default function ForecastResultPage() {
           {/* ═══════════════════════════════════════════════ */}
           {/* 사주 팔자 차트 (즉시 표시) */}
           {/* ═══════════════════════════════════════════════ */}
-          <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
-            <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
-              <Calendar className="w-4 h-4 text-indigo-400" />
+          <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6" role="region" aria-labelledby="heading-chart">
+            <h2 id="heading-chart" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
+              <Calendar className="w-4 h-4 text-indigo-400" aria-hidden="true" />
               사주 팔자 (四柱八字)
             </h2>
 
@@ -653,9 +653,9 @@ export default function ForecastResultPage() {
           {/* 십신 (Ten Gods) */}
           {/* ═══════════════════════════════════════════════ */}
           {tenGods && (
-            <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
-              <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
-                <Target className="w-4 h-4 text-purple-400" />
+            <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4" role="region" aria-labelledby="heading-ten-gods">
+              <h2 id="heading-ten-gods" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-3">
+                <Target className="w-4 h-4 text-purple-400" aria-hidden="true" />
                 십신 (十神) 분석
               </h2>
               <div className="grid grid-cols-4 gap-3 text-center text-xs">
@@ -771,11 +771,11 @@ export default function ForecastResultPage() {
                 const syncInfo = getSyncLabel(alignmentScore);
 
                 return (
-                  <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
+                  <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6" role="region" aria-labelledby="heading-vibe-sync">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800 pb-4">
                       <div className="space-y-1">
-                        <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-indigo-400" />
+                        <h3 id="heading-vibe-sync" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-indigo-400" aria-hidden="true" />
                           바이브 동기화 분석 (Vibe Sync Meter)
                         </h3>
                         <p className="text-xs text-zinc-500">자가 진단 바이브와 우주적/역사적 기류 추정 바이브 간의 일치도입니다.</p>
@@ -828,9 +828,9 @@ export default function ForecastResultPage() {
               })()}
 
               {/* 총운 요약 + 등급 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6" role="region" aria-labelledby="heading-total-fortune">
                 <div className="md:col-span-2 p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
-                  <span className="text-xs uppercase tracking-wider font-semibold text-indigo-400">오늘의 총운</span>
+                  <span id="heading-total-fortune" className="text-xs uppercase tracking-wider font-semibold text-indigo-400">오늘의 총운</span>
                   <p className="text-lg sm:text-xl font-bold leading-relaxed text-zinc-100">
                     &ldquo;{forecast.summary}&rdquo;
                   </p>
@@ -855,10 +855,10 @@ export default function ForecastResultPage() {
               </div>
 
               {/* 행동 지침 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6" role="region" aria-labelledby="heading-action-guide">
                 <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
-                  <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" /> 필수 행동 (Do)
+                  <h3 id="heading-action-guide" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" aria-hidden="true" /> 필수 행동 (Do)
                   </h3>
                   <ul className="space-y-4">
                     {forecast.requiredActions?.map((action: string, idx: number) => (
@@ -872,7 +872,7 @@ export default function ForecastResultPage() {
 
                 <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
                   <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-rose-400" /> 금지 행동 (Don't)
+                    <XCircle className="w-4 h-4 text-rose-400" aria-hidden="true" /> 금지 행동 (Don&apos;t)
                   </h3>
                   <ul className="space-y-4">
                     {forecast.forbiddenActions?.map((action: string, idx: number) => (
@@ -886,9 +886,9 @@ export default function ForecastResultPage() {
               </div>
 
               {/* 세부 해설 */}
-              <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
-                <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-purple-400" /> 세부 분석
+              <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6" role="region" aria-labelledby="heading-detail-analysis">
+                <h3 id="heading-detail-analysis" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-purple-400" aria-hidden="true" /> 세부 분석
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="md:col-span-2 space-y-4">
@@ -971,9 +971,9 @@ export default function ForecastResultPage() {
               )}
 
               {/* 오늘의 피드백 및 RLHF 조정 폼 */}
-              <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
-                <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-400" /> 오늘의 피드백 & 조정 (RLHF)
+              <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6" role="region" aria-labelledby="heading-feedback">
+                <h3 id="heading-feedback" className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400" aria-hidden="true" /> 오늘의 피드백 & 조정 (RLHF)
                 </h3>
 
                 {feedbackSubmitted ? (
@@ -994,9 +994,12 @@ export default function ForecastResultPage() {
                             key={star}
                             type="button"
                             onClick={() => setRating(star)}
-                            className="focus:outline-none transition-all"
+                            aria-label={`${star}점 별점 부여`}
+                            aria-pressed={rating >= star}
+                            className="focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded transition-all"
                           >
                             <Star 
+                              aria-hidden="true"
                               className={cn(
                                 "w-6 h-6 transition-colors", 
                                 rating >= star ? "text-amber-400 fill-amber-400" : "text-zinc-600 hover:text-amber-300"
@@ -1068,7 +1071,8 @@ export default function ForecastResultPage() {
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
                         placeholder="이 조율 지침을 개인화하는 데 필요한 세부 맥락이나 조언이 있다면 남겨주세요."
-                        className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-xl p-3 h-20 focus:outline-none focus:border-zinc-700 transition-colors"
+                        aria-label="추가 의견을 입력하세요"
+                        className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-xl p-3 h-20 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-zinc-700 transition-colors"
                       />
                     </div>
 
@@ -1076,6 +1080,7 @@ export default function ForecastResultPage() {
                       type="button"
                       disabled={rating === 0 || submittingFeedback}
                       onClick={handleFeedbackSubmit}
+                      aria-label="피드백을 제출하고 개인 조율 규칙을 보정합니다"
                       className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-2"
                     >
                       {submittingFeedback ? (

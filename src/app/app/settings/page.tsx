@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
-import { Shield, Download, Trash2, User, Lock, Database, Save, CheckCircle, Briefcase } from "lucide-react";
+import { Shield, Download, Trash2, User, Lock, Database, Save, CheckCircle, Briefcase, Globe } from "lucide-react";
+import { setLocale, getLocale, Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null);
   const [personalCtx, setPersonalCtx] = useState<any>({});
   const [saved, setSaved] = useState(false);
+  const [locale, setLocaleState] = useState<Locale>('ko');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -45,6 +47,9 @@ export default function SettingsPage() {
     if (storedCtx) {
       try { setPersonalCtx(JSON.parse(storedCtx)); } catch {}
     }
+
+    // Load locale
+    setLocaleState(getLocale());
   }, []);
 
   const handleExport = () => {
@@ -78,6 +83,18 @@ export default function SettingsPage() {
   const updateCtx = (key: string, value: string) => {
     setPersonalCtx((prev: any) => ({ ...prev, [key]: value || undefined }));
   };
+
+  const handleLocaleChange = (newLocale: Locale) => {
+    setLocale(newLocale);
+    setLocaleState(newLocale);
+  };
+
+  const LOCALE_OPTIONS: { value: Locale; label: string; flag: string }[] = [
+    { value: 'ko', label: '한국어', flag: '🇰🇷' },
+    { value: 'en', label: 'English', flag: '🇺🇸' },
+    { value: 'ja', label: '日本語', flag: '🇯🇵' },
+    { value: 'zh', label: '中文', flag: '🇨🇳' },
+  ];
 
   const inputClass = "w-full bg-zinc-900/60 border border-zinc-700/60 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 transition-colors";
   const selectClass = "w-full bg-zinc-900/60 border border-zinc-700/60 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500/50 transition-colors";
@@ -237,6 +254,33 @@ export default function SettingsPage() {
               <Save className="w-4 h-4" />
               개인 맥락 저장
             </Button>
+          </div>
+
+          {/* Language / 언어 */}
+          <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+            <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+              <Globe className="w-4 h-4 text-sky-400" />
+              Language / 언어
+            </h2>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              UI 언어를 선택합니다. 사주 원문(한자)은 모든 언어에서 유지됩니다.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {LOCALE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleLocaleChange(opt.value)}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                    locale === opt.value
+                      ? 'bg-indigo-600/80 text-white border border-indigo-500 shadow-lg shadow-indigo-500/20'
+                      : 'bg-zinc-900/60 text-zinc-400 border border-zinc-700/60 hover:border-indigo-500/40 hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="text-lg">{opt.flag}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Data Actions */}
