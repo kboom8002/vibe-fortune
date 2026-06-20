@@ -76,6 +76,13 @@ export default function DailyPage() {
       localStorage.setItem("last-forecast-request", JSON.stringify(forecastRequest));
       localStorage.setItem("last-vibe-checkin", JSON.stringify(vibeCheckIn));
       localStorage.setItem("user-manse-chart", JSON.stringify(chartResult));
+
+      // Save to vibe history for trend tracking
+      const vibeEntry = { energy, valence, arousal, focus, socialLoad, date: new Date().toISOString() };
+      const vibeHistory = JSON.parse(localStorage.getItem("vibe-history") || "[]");
+      vibeHistory.push(vibeEntry);
+      localStorage.setItem("vibe-history", JSON.stringify(vibeHistory));
+
       router.push(`/app/result/${requestId}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "분석 요청 중 오류가 발생했습니다.";

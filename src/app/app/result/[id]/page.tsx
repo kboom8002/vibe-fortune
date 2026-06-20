@@ -10,8 +10,11 @@ import { calculateChart, calculateMajorLuck, calculateAnnualLuck, calculateAllTe
 import { DomainForecastCard } from "@/components/domain-forecast-card";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
+import { ConceptActivationPanel } from "@/components/ConceptActivationPanel";
+import { OperatorTracePanel } from "@/components/OperatorTracePanel";
 import { FortuneChatPanel } from "@/components/chat/FortuneChatPanel";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
+import RlhfTransparencyBanner from "@/components/RlhfTransparencyBanner";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -543,6 +546,9 @@ export default function ForecastResultPage() {
             </div>
           </div>
 
+          {/* RLHF 투명성 배너 */}
+          <RlhfTransparencyBanner />
+
           {/* ═══════════════════════════════════════════════ */}
           {/* 사주 팔자 차트 (즉시 표시) */}
           {/* ═══════════════════════════════════════════════ */}
@@ -717,6 +723,11 @@ export default function ForecastResultPage() {
               )}
             </div>
           )}
+
+          {/* ═══════════════════════════════════════════════ */}
+          {/* TCO 개념 활성화 패널 */}
+          {/* ═══════════════════════════════════════════════ */}
+          <ConceptActivationPanel chartData={chart} vibeData={vibe} />
 
           {/* ═══════════════════════════════════════════════ */}
           {/* LLM 분석 결과 (비동기) */}
@@ -940,6 +951,9 @@ export default function ForecastResultPage() {
                       ))}
                     </div>
                   )}
+
+                  {/* 행동 정책 생성 이유 (Operator Trace) */}
+                  <OperatorTracePanel chartData={chart} vibeData={vibe} />
 
                   {/* Vibe 처방 */}
                   {richOutput.vibePrescription && (

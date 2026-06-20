@@ -16,6 +16,7 @@ export function Navbar() {
     { href: "/app/monthly", label: "월간 분석" },
     { href: "/app/lifetime", label: "인생 총운" },
     { href: "/app/history", label: "분석 기록" },
+    { href: "/app/vibe-history", label: "Vibe 기록" },
     { href: "/app/settings", label: "설정" },
   ];
 
