@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { IdSchema, IsoDateTimeSchema, VibeScoreSchema } from "./common.schema";
+import { PersonalContextSchema } from "./personal-context.schema";
 
 export const ForecastFocusSchema = z.enum([
   "business_finance",
@@ -33,7 +34,10 @@ export const ContextTensorSchema = z.object({
     productPhase: z.string().optional(),
   }),
   channelAxis: z.enum(["daily_board", "weekly_review", "monthly_plan", "relationship_message", "business_strategy", "general"]),
+  // 개인 맥락 축: PersonalContext 필드를 통해 TCO pack 개념 활성화를 조정
+  personalContextAxis: PersonalContextSchema.optional(),
   createdAt: IsoDateTimeSchema,
 });
 
+export type ForecastFocus = z.infer<typeof ForecastFocusSchema>;
 export type ContextTensor = z.infer<typeof ContextTensorSchema>;

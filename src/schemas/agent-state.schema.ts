@@ -7,9 +7,10 @@ import { VibeCheckInSchema } from "./vibe-checkin.schema";
 import { ContextTensorSchema, ForecastFocusSchema } from "./context-tensor.schema";
 import { ConceptStateSchema } from "./concept-state.schema";
 import { RiskVectorSchema } from "./risk-vector.schema";
-import { ActionPolicySchema } from "./action-policy.schema";
+import { ActionPolicySchema, DomainActionPolicySchema } from "./action-policy.schema";
 import { ForecastOutputSchema } from "./forecast-output.schema";
 import { RunReceiptSchema } from "./run-receipt.schema";
+import { PersonalContextSchema } from "./personal-context.schema";
 
 export const SafetyFlagSchema = z.object({
   type: z.enum([
@@ -85,6 +86,9 @@ export const VibeFortuneAgentStateSchema = z.object({
   rlhfBias: RLHFBiasSchema.optional(),
   estimatedVibe: VibeCheckInSchema.optional(),
 
+  // 개인 맥락: TCO pack 개념 선택 및 ActionPolicy mode 편향에 사용
+  personalContext: PersonalContextSchema.optional(),
+
   chart: ManseChartSchema.optional(),
   majorLuck: MajorLuckResultSchema.optional(),
   annualLuck: AnnualLuckResultSchema.optional(),
@@ -102,6 +106,8 @@ export const VibeFortuneAgentStateSchema = z.object({
   riskVector: RiskVectorSchema.optional(),
   operatorOutputs: z.array(ActionPolicySchema.partial()).optional(),
   actionPolicy: ActionPolicySchema.optional(),
+  // 도메인별 세분화 정책: DomainActionPolicy 배열
+  domainActionPolicies: z.array(DomainActionPolicySchema).optional(),
 
   draftOutput: z.unknown().optional(),
   finalOutput: ForecastOutputSchema.optional(),

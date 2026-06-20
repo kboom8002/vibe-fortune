@@ -4,9 +4,10 @@ import { GenderSchema } from "./common.schema";
 import { ManseChartSchema } from "./manse-chart.schema";
 import { VibeCheckInSchema } from "./vibe-checkin.schema";
 import { ForecastFocusSchema } from "./context-tensor.schema";
-import { ForecastOutputSchema } from "./forecast-output.schema";
+import { ForecastOutputSchema, DailyForecastOutputSchema, VibePrescriptionSchema } from "./forecast-output.schema";
 import { RunReceiptSchema } from "./run-receipt.schema";
 import { SafetyFlagSchema, AgentWarningSchema } from "./agent-state.schema";
+import { PersonalContextSchema } from "./personal-context.schema";
 
 // POST /api/profile/birth
 export const BirthProfileRequestSchema = z.object({
@@ -58,6 +59,8 @@ export const DailyForecastRequestSchema = z.object({
 export const DailyForecastResponseSchema = z.object({
   status: z.enum(["ok", "blocked", "onboarding_required", "partial"]),
   forecastOutput: ForecastOutputSchema.optional(),
+  // 풍부한 일일 예보 (richOutput 존재 시 DailyForecastOutputSchema 사용)
+  richOutput: DailyForecastOutputSchema.optional(),
   estimatedVibe: VibeCheckInSchema.optional(),
   warnings: z.array(AgentWarningSchema),
   safetyFlags: z.array(SafetyFlagSchema),
@@ -115,18 +118,24 @@ export const RunReceiptResponseSchema = z.object({
   runReceipt: RunReceiptSchema,
 });
 
-export type BirthProfileRequest = z.infer<typeof BirthProfileRequestSchema>;
-export type BirthProfileResponse = z.infer<typeof BirthProfileResponseSchema>;
-export type VibeCheckinRequest = z.infer<typeof VibeCheckinRequestSchema>;
-export type VibeCheckinResponse = z.infer<typeof VibeCheckinResponseSchema>;
-export type DailyForecastRequest = z.infer<typeof DailyForecastRequestSchema>;
-export type DailyForecastResponse = z.infer<typeof DailyForecastResponseSchema>;
-export type WeeklyForecastRequest = z.infer<typeof WeeklyForecastRequestSchema>;
-export type WeeklyForecastResponse = z.infer<typeof WeeklyForecastResponseSchema>;
-export type MonthlyForecastRequest = z.infer<typeof MonthlyForecastRequestSchema>;
-export type MonthlyForecastResponse = z.infer<typeof MonthlyForecastResponseSchema>;
-export type RunReceiptRequest = z.infer<typeof RunReceiptRequestSchema>;
-export type RunReceiptResponse = z.infer<typeof RunReceiptResponseSchema>;
+// GET /api/forecast/lifetime
+export const LifetimeForecastResponseSchema = z.object({
+  status: z.enum(["ok", "onboarding_required", "processing"]),
+  outputMarkdown: z.string().optional(),
+  outputJson: z.unknown().optional(),
+  annualLuckYear: z.number().int().optional(),
+  createdAt: z.string().optional(),
+  warnings: z.array(AgentWarningSchema),
+});
+
+// PUT /api/profile/personal-context
+export const PersonalContextUpdateRequestSchema = PersonalContextSchema;
+
+export const PersonalContextUpdateResponseSchema = z.object({
+  success: z.boolean(),
+  personalContext: PersonalContextSchema,
+  updatedAt: z.string(),
+});
 
 // POST /api/forecast/feedback
 export const ForecastFeedbackRequestSchema = z.object({
@@ -146,6 +155,23 @@ export const ForecastFeedbackResponseSchema = z.object({
   }),
 });
 
+export type BirthProfileRequest = z.infer<typeof BirthProfileRequestSchema>;
+export type BirthProfileResponse = z.infer<typeof BirthProfileResponseSchema>;
+export type VibeCheckinRequest = z.infer<typeof VibeCheckinRequestSchema>;
+export type VibeCheckinResponse = z.infer<typeof VibeCheckinResponseSchema>;
+export type DailyForecastRequest = z.infer<typeof DailyForecastRequestSchema>;
+export type DailyForecastResponse = z.infer<typeof DailyForecastResponseSchema>;
+export type WeeklyForecastRequest = z.infer<typeof WeeklyForecastRequestSchema>;
+export type WeeklyForecastResponse = z.infer<typeof WeeklyForecastResponseSchema>;
+export type MonthlyForecastRequest = z.infer<typeof MonthlyForecastRequestSchema>;
+export type MonthlyForecastResponse = z.infer<typeof MonthlyForecastResponseSchema>;
+export type RunReceiptRequest = z.infer<typeof RunReceiptRequestSchema>;
+export type RunReceiptResponse = z.infer<typeof RunReceiptResponseSchema>;
+export type LifetimeForecastResponse = z.infer<typeof LifetimeForecastResponseSchema>;
+export type PersonalContextUpdateRequest = z.infer<typeof PersonalContextUpdateRequestSchema>;
+export type PersonalContextUpdateResponse = z.infer<typeof PersonalContextUpdateResponseSchema>;
 export type ForecastFeedbackRequest = z.infer<typeof ForecastFeedbackRequestSchema>;
 export type ForecastFeedbackResponse = z.infer<typeof ForecastFeedbackResponseSchema>;
 
+// Re-export for downstream consumers
+export { VibePrescriptionSchema };
