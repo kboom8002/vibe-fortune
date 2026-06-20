@@ -9,8 +9,34 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("user-birth-profile");
-    if (stored) setProfile(JSON.parse(stored));
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch("/api/profile");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.birthProfile) {
+            setProfile({
+              name: data.birthProfile.name,
+              birthDate: data.birthProfile.birthDateTime,
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching profile from API:", err);
+      }
+      
+      // Fallback to localStorage
+      const stored = localStorage.getItem("user-birth-profile");
+      if (stored) {
+        const p = JSON.parse(stored);
+        setProfile({
+          name: p.name,
+          birthDate: p.birthDateTime,
+        });
+      }
+    };
+    fetchProfile();
   }, []);
 
   const handleExport = () => {

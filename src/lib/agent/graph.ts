@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { VibeFortuneAgentState } from "./state";
-import { calculateChart, calculateMajorLuck, checkChartConsistency, analyzeDivineKillers, calculateAnnualLuck, analyzePeriodInteractions } from "../manse";
+import { calculateChart, calculateMajorLuck, checkChartConsistency, analyzeDivineKillers, calculateAnnualLuck, calculateMonthlyLuck, calculateDailyLuckRange, analyzePeriodInteractions } from "../manse";
+import { STEM_ELEMENTS, BRANCH_MAIN_ELEMENTS } from "../manse/constants";
 import { tcoPackLoader } from "../tco/pack-loader";
 import { loadPrompt } from "./prompt-loader";
 import { llmProvider } from "@/lib/llm/provider";
@@ -8,7 +9,13 @@ import { checkInputSafety, checkOutputSafety } from "@/lib/safety";
 import { getDbClient } from "@/lib/supabase/db";
 import { recomposeFromReceipts } from "./recomposition";
 import { buildRAGContext, formatRAGContextForPrompt } from "./rag-context";
-import { determineVibeTuneProfile, rewriteWithVibeTune } from "./vibe-rewriter";
+import {
+  determineVibeTuneProfile,
+  calculateVibeSyncScore,
+  rewriteWithVibeTune,
+} from "./vibe-rewriter";
+import { ContextTensorSchema } from "@/schemas/context-tensor.schema";
+import { RiskVectorSchema } from "@/schemas/risk-vector.schema";
 
 // 1. InputIntakeNode
 export async function InputIntakeNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
@@ -80,6 +87,12 @@ export async function LoadUserContextNode(state: VibeFortuneAgentState): Promise
 
   if (userId === "local-user") {
     return {
+      rlhfBias: state.rlhfBias || {
+        intensity_offset: 0,
+        risk_sensitivity: 1.0,
+        tone_preference: null,
+        action_count_limit: null,
+      },
       runtime: {
         ...state.runtime,
         nodeHistory: history,
@@ -89,6 +102,25 @@ export async function LoadUserContextNode(state: VibeFortuneAgentState): Promise
 
   try {
     const supabase = getDbClient();
+
+    // 0. Load profile to get rlhf_bias
+    let rlhfBias = state.rlhfBias;
+    const { data: prof, error: profError } = await supabase
+      .from("profiles")
+      .select("rlhf_bias")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (prof && !profError && prof.rlhf_bias) {
+      rlhfBias = prof.rlhf_bias as any;
+    } else if (!rlhfBias) {
+      rlhfBias = {
+        intensity_offset: 0,
+        risk_sensitivity: 1.0,
+        tone_preference: null,
+        action_count_limit: null,
+      };
+    }
 
     // 1. Load birth profile if missing
     let birthProfile = state.birthProfile;
@@ -140,9 +172,32 @@ export async function LoadUserContextNode(state: VibeFortuneAgentState): Promise
       createdAt: r.created_at,
     }));
 
+    // 3. Load recent vibe checkins (up to 5)
+    const { data: vibeHistory, error: vHistError } = await supabase
+      .from("vibe_checkins")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const recentVibes = (vibeHistory || []).map(v => ({
+      id: v.id,
+      userId: v.user_id,
+      valence: Number(v.valence),
+      arousal: Number(v.arousal),
+      energy: Number(v.energy),
+      focus: Number(v.focus),
+      socialLoad: Number(v.social_load),
+      sleepHours: v.sleep_hours ? Number(v.sleep_hours) : undefined,
+      oneLineEvent: v.one_line_event || undefined,
+      createdAt: v.created_at,
+    }));
+
     return {
       birthProfile,
       recentRunReceipts,
+      recentVibes,
+      rlhfBias,
       runtime: {
         ...state.runtime,
         nodeHistory: history,
@@ -196,6 +251,12 @@ export async function ManseCalculatorNode(state: VibeFortuneAgentState): Promise
 
   try {
     const bp = state.birthProfile!;
+    const now = state.runtime?.startedAt ? new Date(state.runtime.startedAt) : new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: bp.timezone, year: "numeric", month: "2-digit", day: "2-digit" });
+    const localDateStr = formatter.format(now);
+
     const chart = calculateChart({
       birthDateTime: bp.birthDateTime,
       timezone: bp.timezone,
@@ -206,6 +267,11 @@ export async function ManseCalculatorNode(state: VibeFortuneAgentState): Promise
       chart,
       gender: bp.gender as any,
     });
+
+    const annualLuck = calculateAnnualLuck({ year: currentYear });
+    const monthlyLuck = calculateMonthlyLuck({ year: currentYear, month: currentMonth });
+    const dailyLuckRange = calculateDailyLuckRange({ from: localDateStr, to: localDateStr, timezone: bp.timezone });
+    const dailyLuck = dailyLuckRange.days[0];
 
     chart.warnings.forEach(w => {
       warnings.push({
@@ -219,6 +285,9 @@ export async function ManseCalculatorNode(state: VibeFortuneAgentState): Promise
     return {
       chart,
       majorLuck,
+      annualLuck,
+      monthlyLuck,
+      dailyLuck,
       warnings,
       runtime: {
         ...state.runtime,
@@ -268,6 +337,227 @@ export async function ChartConsistencyCheckerNode(state: VibeFortuneAgentState):
   };
 }
 
+// 6.5 VibeEstimatorNode
+export async function VibeEstimatorNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
+  const history = [...(state.runtime?.nodeHistory || []), "VibeEstimatorNode"];
+  const warnings = [...(state.warnings || [])];
+
+  // 1. Saju / Temporal Prior Calculation
+  let sajuVibe = { valence: 5.0, arousal: 5.0, energy: 5.0, focus: 5.0, socialLoad: 5.0 };
+
+  const dmElement = state.chart?.dayMaster?.element; // wood, fire, earth, metal, water
+  const dmStrength = state.chart?.dayMaster?.strength?.judgment; // strong, weak, balanced
+  const yongSin = state.chart?.dayMaster?.yongSin; // wood, fire, earth, metal, water
+
+  let dailyStemEl: string | undefined;
+  let dailyBranchEl: string | undefined;
+
+  if (state.dailyLuck?.pillar) {
+    const stem = state.dailyLuck.pillar.stem;
+    const branch = state.dailyLuck.pillar.branch;
+    dailyStemEl = STEM_ELEMENTS[stem as keyof typeof STEM_ELEMENTS];
+    dailyBranchEl = BRANCH_MAIN_ELEMENTS[branch as keyof typeof BRANCH_MAIN_ELEMENTS];
+  }
+
+  // Adjustments based on active daily elements
+  const activeElements = [dailyStemEl, dailyBranchEl].filter(Boolean);
+  
+  let valenceOffset = 0;
+  let arousalOffset = 0;
+  let energyOffset = 0;
+  let focusOffset = 0;
+  let socialOffset = 0;
+
+  activeElements.forEach(el => {
+    if (el === "wood") {
+      arousalOffset += 0.3;
+      energyOffset += 0.3;
+      focusOffset += 0.1;
+    } else if (el === "fire") {
+      valenceOffset += 0.3;
+      arousalOffset += 0.5;
+      socialOffset += 0.6;
+      energyOffset += 0.3;
+    } else if (el === "earth") {
+      focusOffset += 0.5;
+      arousalOffset -= 0.3;
+    } else if (el === "metal") {
+      focusOffset += 0.6;
+      socialOffset -= 0.3;
+      arousalOffset += 0.1;
+    } else if (el === "water") {
+      energyOffset -= 0.5;
+      socialOffset -= 0.6;
+      valenceOffset -= 0.1;
+    }
+
+    // YongSin match boosts valence and energy
+    if (yongSin && el === yongSin) {
+      valenceOffset += 0.6;
+      energyOffset += 0.6;
+    }
+  });
+
+  // Weak Day Master Clashing check
+  const CLASH_MAP: Record<string, string> = {
+    wood: "metal",
+    fire: "water",
+    earth: "wood",
+    metal: "fire",
+    water: "earth",
+  };
+
+  if (dmElement && dmStrength === "weak") {
+    const criticalElement = CLASH_MAP[dmElement];
+    activeElements.forEach(el => {
+      if (el === criticalElement) {
+        arousalOffset += 0.8;
+        socialOffset += 0.6;
+        valenceOffset -= 0.5;
+        energyOffset -= 0.3;
+      }
+    });
+  }
+
+  sajuVibe.valence = Math.min(10, Math.max(0, sajuVibe.valence + valenceOffset));
+  sajuVibe.arousal = Math.min(10, Math.max(0, sajuVibe.arousal + arousalOffset));
+  sajuVibe.energy = Math.min(10, Math.max(0, sajuVibe.energy + energyOffset));
+  sajuVibe.focus = Math.min(10, Math.max(0, sajuVibe.focus + focusOffset));
+  sajuVibe.socialLoad = Math.min(10, Math.max(0, sajuVibe.socialLoad + socialOffset));
+
+  // 2. History Prior Calculation (past run receipts & past vibes)
+  let historyVibe = { ...sajuVibe };
+  let hasHistory = false;
+
+  // Let's check past run receipts completion rate
+  if (state.recentRunReceipts && state.recentRunReceipts.length > 0) {
+    hasHistory = true;
+    const lastThree = state.recentRunReceipts.slice(0, 3);
+    const completionScores = lastThree.map(r => {
+      let score = 1.0;
+      if (r.whatIDeferred && r.whatIDeferred.trim().length > 0) score -= 0.4;
+      if (!r.whatIDid || r.whatIDid.trim().length === 0) score -= 0.6;
+      return Math.max(0, score);
+    });
+    const avgCompletion = completionScores.reduce((a, b) => a + b, 0) / completionScores.length;
+
+    let hEnergyOffset = 0;
+    let hFocusOffset = 0;
+    let hSocialOffset = 0;
+    let hValenceOffset = 0;
+
+    if (avgCompletion < 0.5) {
+      hEnergyOffset -= 1.0;
+      hFocusOffset -= 0.8;
+      hSocialOffset += 0.8;
+      hValenceOffset -= 0.6;
+    } else if (avgCompletion >= 0.8) {
+      hEnergyOffset += 0.4;
+      hFocusOffset += 0.6;
+      hValenceOffset += 0.4;
+    }
+
+    historyVibe.energy = Math.min(10, Math.max(0, historyVibe.energy + hEnergyOffset));
+    historyVibe.focus = Math.min(10, Math.max(0, historyVibe.focus + hFocusOffset));
+    historyVibe.socialLoad = Math.min(10, Math.max(0, historyVibe.socialLoad + hSocialOffset));
+    historyVibe.valence = Math.min(10, Math.max(0, historyVibe.valence + hValenceOffset));
+  }
+
+  // Let's check past vibes trend
+  if (state.recentVibes && state.recentVibes.length > 0) {
+    hasHistory = true;
+    const lastVibe = state.recentVibes[0];
+    historyVibe.valence = (historyVibe.valence * 0.4) + (lastVibe.valence * 0.6);
+    historyVibe.arousal = (historyVibe.arousal * 0.4) + (lastVibe.arousal * 0.6);
+    historyVibe.energy = (historyVibe.energy * 0.4) + (lastVibe.energy * 0.6);
+    historyVibe.focus = (historyVibe.focus * 0.4) + (lastVibe.focus * 0.6);
+    historyVibe.socialLoad = (historyVibe.socialLoad * 0.4) + (lastVibe.socialLoad * 0.6);
+  }
+
+  // 3. User message sentiment extraction (if present)
+  let messageVibe: typeof sajuVibe | undefined;
+  const userMessage = state.input?.userMessage;
+
+  if (userMessage && userMessage.trim().length > 0) {
+    try {
+      const estimatorPrompt = loadPrompt("vibe_estimator");
+
+      const MsgVibeExtractionSchema = z.object({
+        valence: z.number().min(0).max(10),
+        arousal: z.number().min(0).max(10),
+        energy: z.number().min(0).max(10),
+        focus: z.number().min(0).max(10),
+        socialLoad: z.number().min(0).max(10),
+      });
+
+      const fallbackMsgVibe = { ...historyVibe };
+
+      messageVibe = await llmProvider.generateStructuredOutput(
+        `User Message: "${userMessage}"\n\n위 메시지를 분석하여 5대 바이브 차원 점수 JSON을 반환하세요.`,
+        estimatorPrompt,
+        MsgVibeExtractionSchema,
+        fallbackMsgVibe
+      );
+    } catch (e) {
+      console.warn("[VibeEstimatorNode] LLM vibe extraction failed, using history/saju baseline.", e);
+    }
+  }
+
+  // 4. Blending to compute final estimatedVibe
+  let estimatedVibe = { ...historyVibe };
+  if (messageVibe) {
+    if (hasHistory) {
+      estimatedVibe.valence = Math.round((0.5 * messageVibe.valence) + (0.3 * historyVibe.valence) + (0.2 * sajuVibe.valence));
+      estimatedVibe.arousal = Math.round((0.5 * messageVibe.arousal) + (0.3 * historyVibe.arousal) + (0.2 * sajuVibe.arousal));
+      estimatedVibe.energy = Math.round((0.5 * messageVibe.energy) + (0.3 * historyVibe.energy) + (0.2 * sajuVibe.energy));
+      estimatedVibe.focus = Math.round((0.5 * messageVibe.focus) + (0.3 * historyVibe.focus) + (0.2 * sajuVibe.focus));
+      estimatedVibe.socialLoad = Math.round((0.5 * messageVibe.socialLoad) + (0.3 * historyVibe.socialLoad) + (0.2 * sajuVibe.socialLoad));
+    } else {
+      estimatedVibe.valence = Math.round((0.6 * messageVibe.valence) + (0.4 * sajuVibe.valence));
+      estimatedVibe.arousal = Math.round((0.6 * messageVibe.arousal) + (0.4 * sajuVibe.arousal));
+      estimatedVibe.energy = Math.round((0.6 * messageVibe.energy) + (0.4 * sajuVibe.energy));
+      estimatedVibe.focus = Math.round((0.6 * messageVibe.focus) + (0.4 * sajuVibe.focus));
+      estimatedVibe.socialLoad = Math.round((0.6 * messageVibe.socialLoad) + (0.4 * sajuVibe.socialLoad));
+    }
+  } else {
+    if (hasHistory) {
+      estimatedVibe.valence = Math.round((0.6 * historyVibe.valence) + (0.4 * sajuVibe.valence));
+      estimatedVibe.arousal = Math.round((0.6 * historyVibe.arousal) + (0.4 * sajuVibe.arousal));
+      estimatedVibe.energy = Math.round((0.6 * historyVibe.energy) + (0.4 * sajuVibe.energy));
+      estimatedVibe.focus = Math.round((0.6 * historyVibe.focus) + (0.4 * sajuVibe.focus));
+      estimatedVibe.socialLoad = Math.round((0.6 * historyVibe.socialLoad) + (0.4 * sajuVibe.socialLoad));
+    } else {
+      estimatedVibe = {
+        valence: Math.round(sajuVibe.valence),
+        arousal: Math.round(sajuVibe.arousal),
+        energy: Math.round(sajuVibe.energy),
+        focus: Math.round(sajuVibe.focus),
+        socialLoad: Math.round(sajuVibe.socialLoad),
+      };
+    }
+  }
+
+  const finalEstimatedVibe = {
+    id: crypto.randomUUID(),
+    userId: state.userId,
+    valence: estimatedVibe.valence,
+    arousal: estimatedVibe.arousal,
+    energy: estimatedVibe.energy,
+    focus: estimatedVibe.focus,
+    socialLoad: estimatedVibe.socialLoad,
+    createdAt: new Date().toISOString(),
+  };
+
+  return {
+    estimatedVibe: finalEstimatedVibe,
+    warnings,
+    runtime: {
+      ...state.runtime,
+      nodeHistory: history,
+    },
+  };
+}
+
 // 7. VibeCheckInParserNode
 export async function VibeCheckInParserNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "VibeCheckInParserNode"];
@@ -275,22 +565,32 @@ export async function VibeCheckInParserNode(state: VibeFortuneAgentState): Promi
 
   let vibe = state.vibeCheckIn;
   if (!vibe) {
-    warnings.push({
-      code: "VIBE_CHECKIN_PARTIAL",
-      message: "바이브 체크인 정보가 누락되어 기본값(5)으로 대체되었습니다.",
-      node: "VibeCheckInParserNode",
-      userVisible: true,
-    });
-    vibe = {
-      id: crypto.randomUUID(),
-      userId: state.userId,
-      valence: 5,
-      arousal: 5,
-      energy: 5,
-      focus: 5,
-      socialLoad: 5,
-      createdAt: new Date().toISOString(),
-    };
+    if (state.estimatedVibe) {
+      vibe = state.estimatedVibe;
+      warnings.push({
+        code: "VIBE_CHECKIN_PARTIAL",
+        message: "바이브 체크인 정보가 누락되어 AI 추정값으로 대체되었습니다.",
+        node: "VibeCheckInParserNode",
+        userVisible: true,
+      });
+    } else {
+      warnings.push({
+        code: "VIBE_CHECKIN_PARTIAL",
+        message: "바이브 체크인 정보가 누락되어 기본값(5)으로 대체되었습니다.",
+        node: "VibeCheckInParserNode",
+        userVisible: true,
+      });
+      vibe = {
+        id: crypto.randomUUID(),
+        userId: state.userId,
+        valence: 5,
+        arousal: 5,
+        energy: 5,
+        focus: 5,
+        socialLoad: 5,
+        createdAt: new Date().toISOString(),
+      };
+    }
   }
 
   return {
@@ -349,6 +649,38 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
     }
   }
 
+  const nowYear = new Date().getFullYear();
+  const birthYear = parseInt(state.birthProfile?.birthDateTime.substring(0, 4) || "2000");
+  const currentAge = nowYear - birthYear + 1;
+  const currentMajorLuckCycle = state.majorLuck?.cycles.find(c => currentAge >= c.startAge && currentAge < c.startAge + 10)?.ganzhi || "";
+
+  // Calculate Vibe Sync Score
+  if (state.vibeCheckIn && state.chart) {
+    try {
+      const syncResult = calculateVibeSyncScore(
+        state.vibeCheckIn,
+        state.chart.dayMaster?.yongSin,
+        state.chart.dayMaster?.element
+      );
+      evidenceAxis.push(`syncScore:${syncResult.syncScore}`);
+      evidenceAxis.push(`dominantVibeElement:${syncResult.dominantVibeElement}`);
+      
+      // Calculate alignment score between manual check-in and estimated vibe
+      if (state.estimatedVibe) {
+        const valenceDiff = Math.abs((state.vibeCheckIn.valence ?? 5) - (state.estimatedVibe.valence ?? 5));
+        const arousalDiff = Math.abs((state.vibeCheckIn.arousal ?? 5) - (state.estimatedVibe.arousal ?? 5));
+        const energyDiff = Math.abs((state.vibeCheckIn.energy ?? 5) - (state.estimatedVibe.energy ?? 5));
+        const focusDiff = Math.abs((state.vibeCheckIn.focus ?? 5) - (state.estimatedVibe.focus ?? 5));
+        const socialDiff = Math.abs((state.vibeCheckIn.socialLoad ?? 5) - (state.estimatedVibe.socialLoad ?? 5));
+        const totalDiff = valenceDiff + arousalDiff + energyDiff + focusDiff + socialDiff;
+        const alignmentScore = Math.max(0, 100 - (totalDiff * 2));
+        evidenceAxis.push(`estimatedAlignmentScore:${alignmentScore}`);
+      }
+    } catch (e) {
+      console.warn("[ContextTensorBuilderNode] Failed to calculate Vibe Sync Score:", e);
+    }
+  }
+
   const contextTensor = {
     id: crypto.randomUUID(),
     userId: state.userId,
@@ -365,7 +697,10 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
     intentAxis,
     evidenceAxis,
     temporalAxis: {
-      dailyLuck: state.chart?.pillars?.day?.label,
+      majorLuck: currentMajorLuckCycle,
+      annualLuck: state.annualLuck?.pillar.label,
+      monthlyLuck: state.monthlyLuck?.pillar.label,
+      dailyLuck: state.dailyLuck?.pillar.label,
     },
     channelAxis: "daily_board" as const,
     createdAt: new Date().toISOString(),
@@ -373,7 +708,6 @@ export async function ContextTensorBuilderNode(state: VibeFortuneAgentState): Pr
 
   // Schema-First Rule: Validate the contextTensor using ContextTensorSchema
   try {
-    const { ContextTensorSchema } = require("@/schemas/context-tensor.schema");
     ContextTensorSchema.parse(contextTensor);
   } catch (err) {
     console.warn("[ContextTensorBuilderNode] Schema validation failed:", err);
@@ -405,21 +739,47 @@ export async function ConceptCanonicalizerNode(state: VibeFortuneAgentState): Pr
   const history = [...(state.runtime?.nodeHistory || []), "ConceptCanonicalizerNode"];
   const dmElem = state.chart?.dayMaster?.element || "earth";
   
-  // Deterministic fallback values
-  const fallbackActiveConcepts = [`element.${dmElem}.stabilization`];
-  if (state.input?.currentFocus) {
-    fallbackActiveConcepts.push(`focus.${state.input.currentFocus}`);
+  const focus = state.input?.currentFocus || "general";
+  const energy = state.vibeCheckIn?.energy || 5;
+  const arousal = state.vibeCheckIn?.arousal || 5;
+  const valence = state.vibeCheckIn?.valence || 5;
+  
+  // Deterministic State Machine Logic (GAP-10)
+  const active: string[] = [];
+  const suppressed: string[] = [];
+  const gaps: string[] = [];
+
+  let coreConceptState = `${focus}.baseline`;
+  
+  if (energy >= 7 && valence >= 6) {
+    coreConceptState = `${focus}.expansion`;
+    active.push(`${focus}.execution`);
+    suppressed.push(`${focus}.over_planning`);
+  } else if (energy <= 4) {
+    coreConceptState = `${focus}.recovery`;
+    active.push(`${focus}.preservation`);
+    suppressed.push(`${focus}.new_initiatives`);
+  } else {
+    coreConceptState = `${focus}.maintenance`;
+    active.push(`${focus}.stabilization`);
   }
 
+  if (arousal >= 8) {
+    active.push("emotional.regulation");
+    gaps.push("calmness_check");
+  }
+
+  active.push(`element.${dmElem}.alignment`);
+
   const fallbackLLMOutput = {
-    coreConceptState: fallbackActiveConcepts[0],
-    activeConcepts: fallbackActiveConcepts,
-    suppressedConcepts: [] as string[],
-    conceptGaps: [] as string[],
+    coreConceptState,
+    activeConcepts: active,
+    suppressedConcepts: suppressed,
+    conceptGaps: gaps,
     evidenceGaps: [] as string[],
     boundaryGaps: [] as string[],
     conversionGaps: [] as string[],
-    confidence: 1.0,
+    confidence: 0.8,
   };
 
   let llmResult = fallbackLLMOutput;
@@ -480,65 +840,101 @@ export async function ConceptCanonicalizerNode(state: VibeFortuneAgentState): Pr
 // 10. RiskVectorizerNode
 export async function RiskVectorizerNode(state: VibeFortuneAgentState): Promise<Partial<VibeFortuneAgentState>> {
   const history = [...(state.runtime?.nodeHistory || []), "RiskVectorizerNode"];
+  const valence = state.vibeCheckIn?.valence || 5;
+  const arousal = state.vibeCheckIn?.arousal || 5;
   const energy = state.vibeCheckIn?.energy || 5;
-
-  const burnout = energy <= 3 ? 0.8 : 0.2;
+  const focus = state.vibeCheckIn?.focus || 5;
+  const socialLoad = state.vibeCheckIn?.socialLoad || 5;
 
   // 1. Count ten gods occurrences
   const tenGods = state.chart?.tenGods || {};
   const tenGodsList = Object.values(tenGods);
   const pyeonGwanCount = tenGodsList.filter(tg => tg === "편관").length;
   const sangGwanCount = tenGodsList.filter(tg => tg === "상관").length;
+  const pyeonInCount = tenGodsList.filter(tg => tg === "편인").length;
+  const biGeopCount = tenGodsList.filter(tg => tg === "비견" || tg === "겁재").length;
+  const jeongInCount = tenGodsList.filter(tg => tg === "정인").length;
 
   // 2. Check divine killers
   const killers = state.chart ? analyzeDivineKillers(state.chart) : [];
   const hasDoHwa = killers.some(k => k.type === "도화살");
   const hasYeokMa = killers.some(k => k.type === "역마살");
+  const hasGwiMun = killers.some(k => k.type === "귀문관살");
 
-  // 3. Check annual luck clash
+  // 3. Check period interactions (세운)
   let annualClash = false;
-  if (state.chart) {
+  let annualPenalty = false;
+  if (state.chart && state.annualLuck) {
     try {
-      const targetYear = new Date().getFullYear();
-      const annualLuck = calculateAnnualLuck({ year: targetYear });
-      const clashes = analyzePeriodInteractions(state.chart, annualLuck.pillar, "annual");
-      annualClash = clashes.some(c => c.type === "clash");
+      const interactions = analyzePeriodInteractions(state.chart, state.annualLuck.pillar, "annual");
+      annualClash = interactions.some(c => c.type === "clash");
+      annualPenalty = interactions.some(c => c.type === "penalty");
     } catch (e) {
-      console.warn("[RiskVectorizerNode] Failed to check annual clash:", e);
+      console.warn("[RiskVectorizerNode] Failed to check annual interactions:", e);
     }
   }
 
-  // 4. Calculate personalized risk scores
+  // 4. Calculate personalized risk scores (GAP-04: 8 Baseline Rules)
   const cap = (val: number) => Math.min(1.0, Math.max(0.0, val));
+  const dmWeak = state.chart?.dayMaster?.strength?.judgment === "weak";
+  const rlhfSensitivity = state.rlhfBias?.risk_sensitivity ?? 1.0;
   
-  const baseOverextension = energy <= 4 ? 0.7 : 0.1;
-  const overextension = cap(baseOverextension + (hasYeokMa ? 0.1 : 0.0));
-  const scopeLeak = cap(0.1 + (annualClash ? 0.15 : 0.0));
-  const overclaim = cap(0.1 + (sangGwanCount >= 2 ? 0.15 : 0.0));
-  const emotionalOverreaction = cap(0.1 + (hasDoHwa ? 0.1 : 0.0));
-  const legalSafetyRisk = cap(0.1 + (pyeonGwanCount >= 2 ? 0.2 : 0.0));
+  // 1) Burnout: High when energy is low, or socialLoad is high + weak day master
+  const burnoutBase = energy <= 3 ? 0.7 : (energy <= 5 ? 0.4 : 0.1);
+  const burnout = cap((burnoutBase + (socialLoad > 7 && dmWeak ? 0.3 : 0.0) + (pyeonGwanCount >= 2 ? 0.1 : 0.0)) * rlhfSensitivity);
+
+  // 2) Overextension: High when energy is high but focus is low, plus 역마살
+  const overextensionBase = (energy >= 7 && focus <= 4) ? 0.6 : 0.2;
+  const overextension = cap((overextensionBase + (hasYeokMa ? 0.2 : 0.0)) * rlhfSensitivity);
+
+  // 3) Scope Leak: High when focus is low, plus 세운 충, plus 상관 과다
+  const scopeLeakBase = focus <= 3 ? 0.6 : 0.2;
+  const scopeLeak = cap((scopeLeakBase + (annualClash ? 0.2 : 0.0) + (sangGwanCount >= 2 ? 0.1 : 0.0)) * rlhfSensitivity);
+
+  // 4) Overclaim: High when arousal and valence are high, plus 상관 과다
+  const overclaimBase = (arousal >= 7 && valence >= 7) ? 0.6 : 0.1;
+  const overclaim = cap((overclaimBase + (sangGwanCount >= 2 ? 0.2 : 0.0)) * rlhfSensitivity);
+
+  // 5) Emotional Overreaction: Low valence or high arousal, plus 도화살/귀문관살
+  const emotionalBase = (valence <= 3 || arousal >= 8) ? 0.5 : 0.1;
+  const emotionalOverreaction = cap((emotionalBase + (hasDoHwa ? 0.15 : 0.0) + (hasGwiMun ? 0.15 : 0.0)) * rlhfSensitivity);
+
+  // 6) Legal/Safety Risk: 편관 과다 또는 세운 형살
+  const legalBase = (pyeonGwanCount >= 2) ? 0.4 : 0.1;
+  const legalSafetyRisk = cap((legalBase + (annualPenalty ? 0.3 : 0.0) + (annualClash ? 0.1 : 0.0)) * rlhfSensitivity);
+
+  // 7) Relationship Dryness: Low social load and low valence, plus 편인/비겁 과다
+  const drynessBase = (socialLoad <= 3 && valence <= 4) ? 0.5 : 0.1;
+  const relationshipDryness = cap((drynessBase + (pyeonInCount >= 2 ? 0.2 : 0.0) + (biGeopCount >= 3 ? 0.15 : 0.0)) * rlhfSensitivity);
+
+  // 8) Missed Opportunity: Low energy and low arousal, plus 정인 과다 (생각만 많음)
+  const missedBase = (energy <= 4 && arousal <= 4) ? 0.5 : 0.1;
+  const missedOpportunity = cap((missedBase + (jeongInCount >= 2 ? 0.2 : 0.0)) * rlhfSensitivity);
+
+  // Find primary risk dynamically
+  const riskMap = { overextension, scopeLeak, overclaim, burnout, relationshipDryness, emotionalOverreaction, legalSafetyRisk, missedOpportunity };
+  let primaryRisk = "overextension" as const;
+  let maxRisk = -1;
+  for (const [key, val] of Object.entries(riskMap)) {
+    if (val > maxRisk) {
+      maxRisk = val;
+      primaryRisk = key as any;
+    }
+  }
 
   const riskVector = {
     id: crypto.randomUUID(),
     userId: state.userId,
     forecastRequestId: state.requestId,
-    overextension,
-    scopeLeak,
-    overclaim,
-    burnout,
-    relationshipDryness: 0.1,
-    emotionalOverreaction,
-    legalSafetyRisk,
-    missedOpportunity: 0.1,
+    ...riskMap,
     deterministicFortuneRisk: 0.1,
     relationshipManipulationRisk: 0.1,
-    primaryRisk: burnout >= 0.6 ? ("burnout" as const) : ("overextension" as const),
+    primaryRisk,
     createdAt: new Date().toISOString(),
   };
 
-  // Schema-First Rule: Validate the riskVector using RiskVectorSchema
+  // Schema-First Rule: Validate Schema
   try {
-    const { RiskVectorSchema } = require("@/schemas/risk-vector.schema");
     RiskVectorSchema.parse(riskVector);
   } catch (err) {
     console.warn("[RiskVectorizerNode] Schema validation failed:", err);
@@ -605,10 +1001,14 @@ export async function PolicyBinderNode(state: VibeFortuneAgentState): Promise<Pa
   const history = [...(state.runtime?.nodeHistory || []), "PolicyBinderNode"];
   const outputs = state.operatorOutputs || [];
 
-  const requiredActions = Array.from(new Set(outputs.flatMap(o => o.requiredActions || [])));
+  let requiredActions = Array.from(new Set(outputs.flatMap(o => o.requiredActions || [])));
   const forbiddenActions = Array.from(new Set(outputs.flatMap(o => o.forbiddenActions || [])));
   const deferredActions = Array.from(new Set(outputs.flatMap(o => o.deferredActions || [])));
   const boundaryNotes = Array.from(new Set(outputs.flatMap(o => o.boundaryNotes || [])));
+
+  if (state.rlhfBias?.action_count_limit && state.rlhfBias.action_count_limit > 0) {
+    requiredActions = requiredActions.slice(0, state.rlhfBias.action_count_limit);
+  }
 
   state.safetyFlags?.forEach(f => {
     if (f.message) boundaryNotes.push(f.message);
@@ -709,8 +1109,13 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
     }
 
     // Build comprehensive context for the LLM forecast writer
+    const scopeLabel = state.input?.forecastScope === "weekly" ? "주간 전망 (Weekly Forecast)" : state.input?.forecastScope === "monthly" ? "월간 전망 (Monthly Forecast)" : "일간 전망 (Daily Forecast)";
+    
     const contextForLLM = [
       forecastPrompt,
+      "",
+      `--- Forecast Scope: ${scopeLabel} ---`,
+      `This is a ${state.input?.forecastScope || "daily"} forecast. Adjust the tone, horizon, and actionability accordingly.`,
       "",
       "--- Deterministic Chart Data (pre-calculated, DO NOT recalculate) ---",
       `Day Master: ${state.chart?.dayMaster?.stem || "unknown"} (${state.chart?.dayMaster?.element || "unknown"}, ${state.chart?.dayMaster?.polarity || "unknown"})`,
@@ -718,6 +1123,12 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
       `Month Pillar: ${state.chart?.pillars?.month?.label || "unknown"}`,
       `Day Pillar: ${state.chart?.pillars?.day?.label || "unknown"}`,
       `Hour Pillar: ${state.chart?.pillars?.hour?.label || "unknown"}`,
+      "",
+      "--- Temporal Luck (대운/세운/월운/일운) ---",
+      `Major Luck (대운): ${state.contextTensor?.temporalAxis?.majorLuck || "unknown"}`,
+      `Annual Luck (세운): ${state.contextTensor?.temporalAxis?.annualLuck || "unknown"}`,
+      `Monthly Luck (월운): ${state.contextTensor?.temporalAxis?.monthlyLuck || "unknown"}`,
+      `Daily Luck (일운): ${state.contextTensor?.temporalAxis?.dailyLuck || "unknown"}`,
       "",
       "--- Five Element Distribution ---",
       state.chart?.fiveElementDistribution ? Object.entries(state.chart.fiveElementDistribution).map(([el, ct]) => `${el}: ${ct}`).join(", ") : "not available",
@@ -797,7 +1208,7 @@ export async function ForecastWriterNode(state: VibeFortuneAgentState): Promise<
     id: crypto.randomUUID(),
     userId: state.userId,
     forecastRequestId: state.requestId,
-    mode: "daily" as const,
+    mode: (state.input?.forecastScope || "daily") as any,
     outputJson,
     outputMarkdown,
     grade: "A",
@@ -835,6 +1246,17 @@ export async function VibeTuneRewriterNode(state: VibeFortuneAgentState): Promis
     };
 
     const profile = determineVibeTuneProfile(vibeData, state.chart?.dayMaster);
+    
+    // Apply RLHF modifications
+    if (state.rlhfBias) {
+      if (state.rlhfBias.intensity_offset !== 0) {
+        profile.intensityLevel = Math.min(3, Math.max(1, profile.intensityLevel + state.rlhfBias.intensity_offset)) as any;
+      }
+      if (state.rlhfBias.tone_preference) {
+        profile.toneMode = state.rlhfBias.tone_preference as any;
+      }
+    }
+    
     console.log(`[VibeTuneRewriterNode] Tone: ${profile.toneMode}, Intensity: ${profile.intensityLevel}, Element: ${profile.elementMetaphor}`);
 
     const rewritten = await rewriteWithVibeTune(
@@ -1011,6 +1433,24 @@ export async function PersistenceNode(state: VibeFortuneAgentState): Promise<Par
           console.error("[PersistenceNode] Error saving forecast output to Supabase:", error);
         }
       }
+      // 7. Insert safety events
+      if (state.safetyFlags && state.safetyFlags.length > 0) {
+        for (const flag of state.safetyFlags) {
+          const { error } = await supabase.from("safety_events").insert({
+            user_id: userId,
+            forecast_request_id: state.requestId,
+            event_type: flag.type,
+            severity: flag.severity || "medium",
+            input_excerpt: flag.message,
+            action_taken: flag.action || "logged",
+            created_at: new Date().toISOString(),
+          });
+
+          if (error) {
+            console.error("[PersistenceNode] Error saving safety event to Supabase:", error);
+          }
+        }
+      }
     } catch (err) {
       console.error("[PersistenceNode] Unhandled persistence error:", err);
     }
@@ -1036,44 +1476,87 @@ export async function FinalResponseNode(state: VibeFortuneAgentState): Promise<P
   };
 }
 
+import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
+
+// We define a single wrapper state channel that merges Partial updates into the main state
+const AgentGraphAnnotation = Annotation.Root({
+  state: Annotation<VibeFortuneAgentState>({
+    reducer: (currentState, update) => ({ ...currentState, ...update }),
+    default: () => ({} as VibeFortuneAgentState),
+  }),
+});
+
 /**
- * 16개 노드를 순차적으로 호출하여 전체 LangGraph 에이전트 워크플로를 오케스트레이션한다.
+ * Helper to wrap existing nodes for the LangGraph StateGraph
+ */
+function wrapNode(nodeFn: (s: VibeFortuneAgentState) => Promise<Partial<VibeFortuneAgentState>>) {
+  return async (graphState: typeof AgentGraphAnnotation.State) => {
+    const update = await nodeFn(graphState.state);
+    return { state: update };
+  };
+}
+
+// Build the formal LangGraph StateGraph
+const workflowBuilder = new StateGraph(AgentGraphAnnotation)
+  .addNode("InputIntakeNode", wrapNode(InputIntakeNode))
+  .addNode("SafetyGateNode", wrapNode(SafetyGateNode))
+  .addNode("LoadUserContextNode", wrapNode(LoadUserContextNode))
+  .addNode("BirthDataNormalizerNode", wrapNode(BirthDataNormalizerNode))
+  .addNode("ManseCalculatorNode", wrapNode(ManseCalculatorNode))
+  .addNode("ChartConsistencyCheckerNode", wrapNode(ChartConsistencyCheckerNode))
+  .addNode("VibeEstimatorNode", wrapNode(VibeEstimatorNode))
+  .addNode("VibeCheckInParserNode", wrapNode(VibeCheckInParserNode))
+  .addNode("ContextTensorBuilderNode", wrapNode(ContextTensorBuilderNode))
+  .addNode("ConceptCanonicalizerNode", wrapNode(ConceptCanonicalizerNode))
+  .addNode("RiskVectorizerNode", wrapNode(RiskVectorizerNode))
+  .addNode("OperatorExecutorNode", wrapNode(OperatorExecutorNode))
+  .addNode("PolicyBinderNode", wrapNode(PolicyBinderNode))
+  .addNode("ForecastWriterNode", wrapNode(ForecastWriterNode))
+  .addNode("VibeTuneRewriterNode", wrapNode(VibeTuneRewriterNode))
+  .addNode("SafetyBoundaryReviewerNode", wrapNode(SafetyBoundaryReviewerNode))
+  .addNode("PersistenceNode", wrapNode(PersistenceNode))
+  .addNode("FinalResponseNode", wrapNode(FinalResponseNode));
+
+// Edges
+workflowBuilder.addEdge(START, "InputIntakeNode");
+workflowBuilder.addEdge("InputIntakeNode", "SafetyGateNode");
+
+// Conditional Edge from SafetyGateNode
+workflowBuilder.addConditionalEdges("SafetyGateNode", (graphState) => {
+  const s = graphState.state;
+  if (s.errors && s.errors.length > 0) {
+    console.warn("[LangGraph] Safety block active. Escaping to FinalResponseNode.");
+    return "FinalResponseNode"; // Fast fail
+  }
+  return "LoadUserContextNode";
+}, {
+  "FinalResponseNode": "FinalResponseNode",
+  "LoadUserContextNode": "LoadUserContextNode",
+});
+
+workflowBuilder.addEdge("LoadUserContextNode", "BirthDataNormalizerNode");
+workflowBuilder.addEdge("BirthDataNormalizerNode", "ManseCalculatorNode");
+workflowBuilder.addEdge("ManseCalculatorNode", "ChartConsistencyCheckerNode");
+workflowBuilder.addEdge("ChartConsistencyCheckerNode", "VibeEstimatorNode");
+workflowBuilder.addEdge("VibeEstimatorNode", "VibeCheckInParserNode");
+workflowBuilder.addEdge("VibeCheckInParserNode", "ContextTensorBuilderNode");
+workflowBuilder.addEdge("ContextTensorBuilderNode", "ConceptCanonicalizerNode");
+workflowBuilder.addEdge("ConceptCanonicalizerNode", "RiskVectorizerNode");
+workflowBuilder.addEdge("RiskVectorizerNode", "OperatorExecutorNode");
+workflowBuilder.addEdge("OperatorExecutorNode", "PolicyBinderNode");
+workflowBuilder.addEdge("PolicyBinderNode", "ForecastWriterNode");
+workflowBuilder.addEdge("ForecastWriterNode", "VibeTuneRewriterNode");
+workflowBuilder.addEdge("VibeTuneRewriterNode", "SafetyBoundaryReviewerNode");
+workflowBuilder.addEdge("SafetyBoundaryReviewerNode", "PersistenceNode");
+workflowBuilder.addEdge("PersistenceNode", "FinalResponseNode");
+workflowBuilder.addEdge("FinalResponseNode", END);
+
+const app = workflowBuilder.compile();
+
+/**
+ * LangGraph 기반 에이전트 워크플로 실행 함수
  */
 export async function runAgentWorkflow(initialState: VibeFortuneAgentState): Promise<VibeFortuneAgentState> {
-  let state = { ...initialState };
-
-  const nodes = [
-    InputIntakeNode,
-    SafetyGateNode,
-    LoadUserContextNode,
-    BirthDataNormalizerNode,
-    ManseCalculatorNode,
-    ChartConsistencyCheckerNode,
-    VibeCheckInParserNode,
-    ContextTensorBuilderNode,
-    ConceptCanonicalizerNode,
-    RiskVectorizerNode,
-    OperatorExecutorNode,
-    PolicyBinderNode,
-    ForecastWriterNode,
-    VibeTuneRewriterNode,     // NEW: Tone rewriting based on vibe state
-    SafetyBoundaryReviewerNode,
-    PersistenceNode,
-    FinalResponseNode,
-  ];
-
-  for (const node of nodes) {
-    const update = await node(state);
-    state = { ...state, ...update };
-    
-    // 에러 발생 시 safety/final response를 향해 빠른 탈출
-    if (state.errors && state.errors.length > 0 && node.name === "SafetyGateNode") {
-      console.warn("[runAgentWorkflow] Safety block active. Escaping to FinalResponseNode.");
-      const finalUpdate = await FinalResponseNode(state);
-      state = { ...state, ...finalUpdate };
-      break;
-    }
-  }
-
-  return state;
+  const result = await app.invoke({ state: initialState });
+  return result.state;
 }

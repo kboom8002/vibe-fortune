@@ -20,7 +20,7 @@ export default function WeeklyPage() {
         const res = await fetch("/api/forecast/weekly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ from, to, currentFocus: ["business_finance"] }),
+          body: JSON.stringify({ targetWeekStart: from, currentFocus: ["business_finance"] }),
         });
 
         if (res.ok) {

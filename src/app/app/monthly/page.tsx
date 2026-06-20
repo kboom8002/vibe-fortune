@@ -17,7 +17,7 @@ export default function MonthlyPage() {
         const res = await fetch("/api/forecast/monthly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ month }),
+          body: JSON.stringify({ targetMonth: month, currentFocus: ["business_finance"] }),
         });
 
         if (res.ok) {

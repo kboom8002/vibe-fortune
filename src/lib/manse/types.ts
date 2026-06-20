@@ -25,6 +25,11 @@ export type ChartResult = {
     stem: "甲" | "乙" | "丙" | "丁" | "戊" | "己" | "庚" | "辛" | "壬" | "癸";
     element: "wood" | "fire" | "earth" | "metal" | "water";
     polarity: "yin" | "yang";
+    strength?: {
+      score: number;
+      judgment: "strong" | "weak" | "balanced";
+    };
+    yongSin?: string;
   };
   tenGods: Record<string, string>;
   hiddenStems: Record<string, string[]>;

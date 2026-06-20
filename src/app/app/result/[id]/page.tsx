@@ -10,7 +10,7 @@ import { calculateChart, calculateMajorLuck, calculateAnnualLuck, calculateAllTe
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
-  ArrowRight
+  ArrowRight, Star
 } from "lucide-react";
 
 // 오행 컬러 매핑
@@ -32,6 +32,14 @@ const ELEMENT_BG: Record<string, string> = {
 export default function ForecastResultPage() {
   const router = useRouter();
   const params = useParams();
+  const forecastIdStr = Array.isArray(params.id) ? params.id[0] : params.id || "";
+  
+  const getSyncLabel = (score: number) => {
+    if (score >= 90) return { text: "우주적 정렬 (Cosmic Alignment)", color: "text-emerald-400" };
+    if (score >= 75) return { text: "높은 동화 (High Alignment)", color: "text-indigo-400" };
+    if (score >= 50) return { text: "보통 정합 (Moderate Alignment)", color: "text-amber-400" };
+    return { text: "재조율 필요 (Re-alignment Needed)", color: "text-rose-400" };
+  };
   const [profile, setProfile] = useState<any>(null);
   const [chart, setChart] = useState<any>(null);
   const [majorLuck, setMajorLuck] = useState<any>(null);
@@ -43,6 +51,15 @@ export default function ForecastResultPage() {
   const [forecast, setForecast] = useState<any>(null);
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState("");
+  
+  // RLHF & Vibe Estimation States
+  const [estimatedVibe, setEstimatedVibe] = useState<any>(null);
+  const [forecastId, setForecastId] = useState<string>("");
+  const [rating, setRating] = useState<number>(0);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [comment, setComment] = useState("");
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   useEffect(() => {
     const storedProfile = localStorage.getItem("user-birth-profile");
@@ -158,6 +175,18 @@ export default function ForecastResultPage() {
             generateLocalForecast(chartResult, vibeData);
           } else {
             setForecast(mappedForecast);
+            setForecastId(fo.id || forecastIdStr || "");
+            if (data.estimatedVibe) {
+              setEstimatedVibe(data.estimatedVibe);
+            } else {
+              setEstimatedVibe({
+                valence: 5,
+                arousal: 4,
+                energy: 5,
+                focus: 6,
+                socialLoad: 4,
+              });
+            }
             localStorage.setItem("last-generated-forecast", JSON.stringify(mappedForecast));
           }
         } else {
@@ -207,6 +236,50 @@ export default function ForecastResultPage() {
         "활력이 낮은 상태입니다. 반드시 2시간 이상 휴식을 확보하세요.",
       ] : [],
     });
+
+    setEstimatedVibe({
+      valence: Math.min(10, Math.max(0, valence + 1)),
+      arousal: Math.min(10, Math.max(0, (vibeData?.arousal ?? 5) - 1)),
+      energy: energy,
+      focus: focus,
+      socialLoad: vibeData?.socialLoad ?? 5,
+    });
+    setForecastId(forecastIdStr || "local-forecast-id");
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (rating === 0) return;
+    setSubmittingFeedback(true);
+    try {
+      const res = await fetch("/api/forecast/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          forecastOutputId: forecastId,
+          rating,
+          feedbackTags: selectedTags,
+          comment,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.rlhfBias) {
+          localStorage.setItem("local-rlhf-bias", JSON.stringify(data.rlhfBias));
+        }
+        setFeedbackSubmitted(true);
+      }
+    } catch (err) {
+      console.error("Feedback submit failed:", err);
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
   };
 
   // 로딩 중 (차트 계산 전)
@@ -452,6 +525,74 @@ export default function ForecastResultPage() {
                 </div>
               )}
 
+              {/* 바이브 동기화 분석 (Vibe Sync Meter) */}
+              {vibe && estimatedVibe && (() => {
+                const valenceDiff = Math.abs((vibe.valence ?? 5) - (estimatedVibe.valence ?? 5));
+                const arousalDiff = Math.abs((vibe.arousal ?? 5) - (estimatedVibe.arousal ?? 5));
+                const energyDiff = Math.abs((vibe.energy ?? 5) - (estimatedVibe.energy ?? 5));
+                const focusDiff = Math.abs((vibe.focus ?? 5) - (estimatedVibe.focus ?? 5));
+                const socialDiff = Math.abs((vibe.socialLoad ?? vibe.social_load ?? 5) - (estimatedVibe.socialLoad ?? 5));
+                const totalDiff = valenceDiff + arousalDiff + energyDiff + focusDiff + socialDiff;
+                const alignmentScore = Math.max(0, 100 - (totalDiff * 2));
+                const syncInfo = getSyncLabel(alignmentScore);
+
+                return (
+                  <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800 pb-4">
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-indigo-400" />
+                          바이브 동기화 분석 (Vibe Sync Meter)
+                        </h3>
+                        <p className="text-xs text-zinc-500">자가 진단 바이브와 우주적/역사적 기류 추정 바이브 간의 일치도입니다.</p>
+                      </div>
+                      <div className="flex items-center gap-2 bg-zinc-950/50 px-3 py-1.5 rounded-full border border-zinc-800">
+                        <span className="text-xs text-zinc-400">동기화율:</span>
+                        <span className={cn("text-sm font-bold", syncInfo.color)}>{alignmentScore}% ({syncInfo.text})</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {[
+                        { label: "정서 밸런스 (Valence)", mVal: vibe.valence ?? 5, eVal: estimatedVibe.valence ?? 5 },
+                        { label: "각성/긴장도 (Arousal)", mVal: vibe.arousal ?? 5, eVal: estimatedVibe.arousal ?? 5 },
+                        { label: "신체 활력 (Energy)", mVal: vibe.energy ?? 5, eVal: estimatedVibe.energy ?? 5 },
+                        { label: "인지 몰입도 (Focus)", mVal: vibe.focus ?? 5, eVal: estimatedVibe.focus ?? 5 },
+                        { label: "사회적 부하 (Social Load)", mVal: vibe.socialLoad ?? vibe.social_load ?? 5, eVal: estimatedVibe.socialLoad ?? 5 },
+                      ].map((dim, idx) => (
+                        <div key={idx} className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-300 font-medium">{dim.label}</span>
+                            <span className="text-zinc-500">자가: <strong className="text-sky-400">{dim.mVal}</strong> | 추정: <strong className="text-indigo-400">{dim.eVal}</strong></span>
+                          </div>
+                          <div className="h-3 w-full bg-zinc-950 rounded-full overflow-hidden relative flex flex-col justify-center">
+                            <div 
+                              className="absolute h-1.5 bg-sky-400/80 rounded-full top-0.5 left-0 transition-all duration-500"
+                              style={{ width: `${dim.mVal * 10}%` }}
+                            />
+                            <div 
+                              className="absolute h-1.5 bg-indigo-500/80 rounded-full bottom-0.5 left-0 transition-all duration-500"
+                              style={{ width: `${dim.eVal * 10}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-2 border-t border-zinc-800/40">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-1.5 bg-sky-400 rounded-full" />
+                        <span>자가 진단 바이브</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-1.5 bg-indigo-500 rounded-full" />
+                        <span>AI 기류 추정 바이브</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 총운 요약 + 등급 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-2 p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
@@ -536,6 +677,127 @@ export default function ForecastResultPage() {
                     </ul>
                   </div>
                 </div>
+              </div>
+
+              {/* 오늘의 피드백 및 RLHF 조정 폼 */}
+              <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
+                <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400" /> 오늘의 피드백 & 조정 (RLHF)
+                </h3>
+
+                {feedbackSubmitted ? (
+                  <div className="text-center py-6 space-y-2">
+                    <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center mx-auto border border-indigo-500/20">
+                      <Sparkles className="w-6 h-6 animate-pulse text-indigo-400" />
+                    </div>
+                    <h4 className="text-zinc-200 font-semibold text-sm">피드백이 성공적으로 반영되었습니다!</h4>
+                    <p className="text-xs text-zinc-500">조정된 피드백 변수가 다음 운세 및 조율 행동 정책 생성에 즉시 적용됩니다.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-xs text-zinc-400 font-medium">오늘 지침의 전반적인 유용성에 대해 별점을 남겨주세요.</label>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setRating(star)}
+                            className="focus:outline-none transition-all"
+                          >
+                            <Star 
+                              className={cn(
+                                "w-6 h-6 transition-colors", 
+                                rating >= star ? "text-amber-400 fill-amber-400" : "text-zinc-600 hover:text-amber-300"
+                              )} 
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {rating > 0 && rating <= 3 && (
+                      <div className="space-y-3 animate-fadeIn">
+                        <label className="text-xs text-zinc-400 font-medium">불편하셨던 부분이 있다면 피드백 태그를 선택해주세요 (중복 가능)</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "too_demanding", label: "지침이 무리함 (Too Demanding)" },
+                            { key: "too_vague", label: "내용이 너무 모호함 (Too Vague)" },
+                            { key: "too_negative", label: "불안감을 과도하게 유발 (Too Negative)" },
+                            { key: "inaccurate", label: "오늘 바이브/실제 컨디션과 맞지 않음" }
+                          ].map((tag) => (
+                            <button
+                              key={tag.key}
+                              type="button"
+                              onClick={() => toggleTag(tag.key)}
+                              className={cn(
+                                "text-xs px-3 py-1.5 rounded-full border transition-all",
+                                selectedTags.includes(tag.key)
+                                  ? "bg-indigo-500/10 border-indigo-400 text-indigo-300 font-semibold"
+                                  : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                              )}
+                            >
+                              {tag.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {rating >= 4 && (
+                      <div className="space-y-3 animate-fadeIn">
+                        <label className="text-xs text-zinc-400 font-medium">좋았던 점이 있다면 피드백 태그를 선택해주세요 (중복 가능)</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "accurate", label: "오늘 내 에너지/컨디션과 정확히 일치함" },
+                            { key: "appropriate", label: "행동 가이드라인이 실행하기 아주 적절했음" },
+                            { key: "helpful_tone", label: "격려해주거나 명확한 코칭 톤이 마음에 듦" }
+                          ].map((tag) => (
+                            <button
+                              key={tag.key}
+                              type="button"
+                              onClick={() => toggleTag(tag.key)}
+                              className={cn(
+                                "text-xs px-3 py-1.5 rounded-full border transition-all",
+                                selectedTags.includes(tag.key)
+                                  ? "bg-emerald-500/10 border-emerald-400 text-emerald-300 font-semibold"
+                                  : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                              )}
+                            >
+                              {tag.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-xs text-zinc-400 font-medium">의견 보내기 (선택)</label>
+                      <textarea
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        placeholder="이 조율 지침을 개인화하는 데 필요한 세부 맥락이나 조언이 있다면 남겨주세요."
+                        className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-xl p-3 h-20 focus:outline-none focus:border-zinc-700 transition-colors"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      disabled={rating === 0 || submittingFeedback}
+                      onClick={handleFeedbackSubmit}
+                      className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-2"
+                    >
+                      {submittingFeedback ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                          <span>피드백 전송 중...</span>
+                        </>
+                      ) : (
+                        <span>피드백 제출 및 개인 룰 보정</span>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}

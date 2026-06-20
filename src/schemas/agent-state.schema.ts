@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { IdSchema, IsoDateTimeSchema } from "./common.schema";
+import { IdSchema, IsoDateTimeSchema, PillarSchema } from "./common.schema";
 import { BirthProfileSchema, ProvidedChartSchema } from "./birth-profile.schema";
-import { ManseChartSchema } from "./manse-chart.schema";
+import { ProfileSchema, RLHFBiasSchema } from "./profile.schema";
+import { ManseChartSchema, MajorLuckResultSchema, AnnualLuckResultSchema, MonthlyLuckResultSchema, ChartConsistencySchema } from "./manse-chart.schema";
 import { VibeCheckInSchema } from "./vibe-checkin.schema";
 import { ContextTensorSchema, ForecastFocusSchema } from "./context-tensor.schema";
 import { ConceptStateSchema } from "./concept-state.schema";
@@ -64,6 +65,8 @@ export const AgentErrorSchema = z.object({
 });
 
 export const ForecastRequestInputSchema = z.object({
+  forecastScope: z.enum(["daily", "weekly", "monthly"]).default("daily"),
+  targetDate: z.string().optional(), // For daily/weekly/monthly context
   vibeCheckIn: z.lazy(() => VibeCheckInSchema.partial()).optional(),
   currentFocus: ForecastFocusSchema.optional(),
   timezone: z.string().default("Asia/Seoul"),
@@ -76,16 +79,21 @@ export const VibeFortuneAgentStateSchema = z.object({
   requestId: z.string(),
   input: ForecastRequestInputSchema,
 
-  profile: z.unknown().optional(), // profile placeholder
+  profile: ProfileSchema.optional(),
   birthProfile: BirthProfileSchema.optional(),
   providedChart: ProvidedChartSchema.optional(),
+  rlhfBias: RLHFBiasSchema.optional(),
+  estimatedVibe: VibeCheckInSchema.optional(),
 
   chart: ManseChartSchema.optional(),
-  majorLuck: z.unknown().optional(), // majorLuck placeholder
-  luckRange: z.unknown().optional(), // luckRange placeholder
-  chartConsistency: z.unknown().optional(), // chartConsistency placeholder
+  majorLuck: MajorLuckResultSchema.optional(),
+  annualLuck: AnnualLuckResultSchema.optional(),
+  monthlyLuck: MonthlyLuckResultSchema.optional(),
+  dailyLuck: z.object({ date: z.string(), pillar: PillarSchema }).optional(),
+  chartConsistency: ChartConsistencySchema.optional(),
 
   vibeCheckIn: VibeCheckInSchema.optional(),
+  recentVibes: z.array(VibeCheckInSchema).optional(),
   recentRunReceipts: z.array(RunReceiptSchema).optional(),
   recentForecastOutputs: z.array(ForecastOutputSchema).optional(),
 

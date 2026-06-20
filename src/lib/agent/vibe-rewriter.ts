@@ -128,6 +128,66 @@ export function determineVibeTuneProfile(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Vibe-오행 매핑 & Sync Score (GAP-09)
+// ---------------------------------------------------------------------------
+
+export type VibeSyncResult = {
+  syncScore: number;
+  dominantVibeElement: ElementKey;
+  vibeElements: Record<ElementKey, number>;
+};
+
+export function calculateVibeSyncScore(
+  vibe: { energy: number; valence: number; arousal: number; focus: number; socialLoad: number },
+  yongSin?: string,
+  dmElement?: string
+): VibeSyncResult {
+  const { energy, valence, arousal, focus, socialLoad } = vibe;
+
+  const vibeElements: Record<ElementKey, number> = {
+    wood: (arousal + energy) / 2, // 성장, 팽창
+    fire: (energy + socialLoad + valence) / 3, // 열정, 발산, 관계
+    earth: (focus + (10 - arousal)) / 2, // 안정성, 중심잡기
+    metal: (focus + (10 - socialLoad)) / 2, // 결단, 집중, 경계설정
+    water: ((10 - energy) + (10 - socialLoad)) / 2, // 휴식, 응축, 내면
+  };
+
+  let maxScore = -1;
+  let dominantVibeElement: ElementKey = "wood";
+
+  for (const [elem, score] of Object.entries(vibeElements)) {
+    if (score > maxScore) {
+      maxScore = score;
+      dominantVibeElement = elem as ElementKey;
+    }
+  }
+
+  // Calculate Sync Score (0 to 100)
+  // Base sync is 50. If dominant element matches YongSin, +30. If it matches DayMaster, +15.
+  // We also look at the absolute score of the YongSin element.
+  let syncScore = 50;
+  
+  if (yongSin) {
+    const ysScore = vibeElements[yongSin as ElementKey] || 0;
+    syncScore += (ysScore - 5) * 5; // -25 to +25 based on how active the YongSin is in the current vibe
+    if (dominantVibeElement === yongSin) syncScore += 15;
+  }
+  
+  if (dmElement && dominantVibeElement === dmElement) {
+    syncScore += 10;
+  }
+
+  syncScore = Math.min(100, Math.max(0, Math.round(syncScore)));
+
+  return {
+    syncScore,
+    dominantVibeElement,
+    vibeElements,
+  };
+}
+
+
 /**
  * Build the system-level rewriting instruction string for the LLM.
  */

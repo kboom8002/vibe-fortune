@@ -57,3 +57,36 @@ export const ManseChartSchema = z.object({
 
 export type ManseChart = z.infer<typeof ManseChartSchema>;
 export type ManseWarning = z.infer<typeof ManseWarningSchema>;
+
+export const MajorLuckCycleSchema = z.object({
+  stem: z.string(),
+  branch: z.string(),
+  ganzhi: z.string(),
+  startAge: z.number(),
+  startDate: z.string().optional(),
+});
+
+export const MajorLuckResultSchema = z.object({
+  id: IdSchema,
+  userId: IdSchema,
+  birthProfileId: IdSchema,
+  chartId: IdSchema.optional(),
+  direction: z.enum(["forward", "backward"]),
+  startAge: z.number(),
+  startDate: z.string().optional(),
+  cycles: z.array(MajorLuckCycleSchema),
+  calculationPolicy: MansePolicySchema,
+  warnings: z.array(ManseWarningSchema),
+  createdAt: z.string(),
+});
+
+export const AnnualLuckResultSchema = z.object({
+  year: z.number(),
+  pillar: PillarSchema,
+});
+
+export const MonthlyLuckResultSchema = z.object({
+  year: z.number(),
+  month: z.number(),
+  pillar: PillarSchema,
+});

@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { runAgentWorkflow } from "@/lib/agent/graph";
 import { DailyForecastRequestSchema } from "@/schemas/api-contracts.schema";
 import { VibeFortuneAgentState } from "@/lib/agent/state";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user ? user.id : "local-user";
+
     const body = await request.json();
     
     // 1. Validate request with Zod
@@ -69,9 +74,10 @@ export async function POST(request: Request) {
     } : undefined;
 
     const initialState: VibeFortuneAgentState = {
-      userId: "local-user",
+      userId,
       requestId: crypto.randomUUID(),
       input: {
+        forecastScope: "daily",
         vibeCheckIn: vibeCheckIn,
         currentFocus: currentFocus[0],
         providedChart: body.providedChart,
@@ -106,6 +112,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       status,
       forecastOutput: finalState.finalOutput,
+      estimatedVibe: finalState.estimatedVibe,
       warnings: finalState.warnings,
       safetyFlags: finalState.safetyFlags,
     });
