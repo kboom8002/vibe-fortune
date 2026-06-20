@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { calculateChart, calculateMajorLuck, calculateAnnualLuck } from "@/lib/manse";
 import type { ChartResult } from "@/lib/manse/types";
+import { loadPrompt, getPromptVersions } from "@/lib/prompt-registry";
 
 // ---------------------------------------------------------------------------
 // Element type & mappings (deterministic — no LLM)
@@ -393,20 +394,12 @@ export async function POST(request: Request) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY;
     if (apiKey) {
       try {
-        const fs = await import("fs");
-        const path = await import("path");
-        let lifetimePrompt = "";
-        try {
-          lifetimePrompt = fs.readFileSync(
-            path.join(process.cwd(), "prompts", "lifetime_fortune_writer.md"),
-            "utf-8"
-          );
-        } catch { /* prompt file not found — skip LLM */ }
+        const lifetimePromptVersion = loadPrompt('lifetime_fortune_writer');
+        const lifetimePrompt = lifetimePromptVersion.content;
 
         if (lifetimePrompt) {
-          const systemPromptPath = path.join(process.cwd(), "prompts", "system.md");
-          let systemPrompt = "You are TCO-Vibe Fortune Coach.";
-          try { systemPrompt = fs.readFileSync(systemPromptPath, "utf-8"); } catch {}
+          const systemPromptVersion = loadPrompt('system');
+          const systemPrompt = systemPromptVersion.content || "You are TCO-Vibe Fortune Coach.";
 
           const contextData = {
             dayMaster: chartResult.dayMaster,
@@ -476,6 +469,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       status: "ok",
       lifetimeFortune,
+      promptVersions: getPromptVersions(),
     });
   } catch (err) {
     console.error("[LifetimeAPI] Error:", err);

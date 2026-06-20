@@ -16,6 +16,8 @@ import { OperatorTracePanel } from "@/components/OperatorTracePanel";
 import { FortuneChatPanel } from "@/components/chat/FortuneChatPanel";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
 import RlhfTransparencyBanner from "@/components/RlhfTransparencyBanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import FortuneLoadingScreen from "@/components/FortuneLoadingScreen";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -510,10 +512,7 @@ export default function ForecastResultPage() {
   if (!chart) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-50 flex items-center justify-center font-sans">
-        <div className="text-center space-y-4">
-          <Clock className="w-8 h-8 text-indigo-400 animate-spin mx-auto" />
-          <p className="text-zinc-400 text-sm">사주 차트를 계산하고 있습니다...</p>
-        </div>
+        <FortuneLoadingScreen stage="chart" />
       </div>
     );
   }
@@ -528,6 +527,7 @@ export default function ForecastResultPage() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/10 blur-glow pointer-events-none" />
 
       <main className="py-12 px-6 flex-1">
+        <ErrorBoundary fallbackMessage="운세 결과를 표시하는 중 오류가 발생했습니다. 새로고침하거나 다시 진단해주세요.">
         <div className="max-w-4xl w-full mx-auto space-y-8 relative z-10">
 
           {/* Header */}
@@ -737,9 +737,8 @@ export default function ForecastResultPage() {
           {/* LLM 분석 결과 (비동기) */}
           {/* ═══════════════════════════════════════════════ */}
           {llmLoading && (
-            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md text-center space-y-4">
-              <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto" />
-              <p className="text-sm text-zinc-400">AI가 오늘의 운영 지침을 분석하고 있습니다...</p>
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md">
+              <FortuneLoadingScreen stage="forecast" dayMasterElement={dm?.element} />
             </div>
           )}
 
@@ -1102,6 +1101,7 @@ export default function ForecastResultPage() {
             return <DisclaimerBanner levels={disclaimerLevels} />;
           })()}
         </div>
+        </ErrorBoundary>
 
           {/* 운세 코치 채팅 패널 */}
           {chart && forecast && (

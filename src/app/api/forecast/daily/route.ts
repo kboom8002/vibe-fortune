@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runAgentWorkflow } from "@/lib/agent/graph";
 import { DailyForecastRequestSchema } from "@/schemas/api-contracts.schema";
 import { VibeFortuneAgentState } from "@/lib/agent/state";
+import { loadPrompt, getPromptVersions } from "@/lib/prompt-registry";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -98,10 +99,14 @@ export async function POST(request: Request) {
       },
     };
 
-    // 3. Trigger LangGraph workflow!
+    // 3. Load prompts via versioned registry
+    loadPrompt('system');
+    loadPrompt('forecast_writer');
+
+    // 4. Trigger LangGraph workflow!
     const finalState = await runAgentWorkflow(initialState);
 
-    // 4. Determine status based on safety and errors
+    // 5. Determine status based on safety and errors
     let status: "ok" | "blocked" | "onboarding_required" | "partial" = "ok";
     if (finalState.errors && finalState.errors.some(e => e.code === "SAFETY_BLOCKED")) {
       status = "blocked";
@@ -118,6 +123,7 @@ export async function POST(request: Request) {
       estimatedVibe: finalState.estimatedVibe,
       warnings: finalState.warnings,
       safetyFlags: finalState.safetyFlags,
+      promptVersions: getPromptVersions(),
     });
   } catch (err: any) {
     return NextResponse.json(

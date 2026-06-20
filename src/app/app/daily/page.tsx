@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sparkles, Heart, Flame, Brain, AlertTriangle, TrendingUp } from "lucide-react";
 import { calculateChart } from "@/lib/manse";
+import FortuneLoadingScreen from "@/components/FortuneLoadingScreen";
 
 export default function DailyPage() {
   const router = useRouter();
@@ -106,7 +107,7 @@ export default function DailyPage() {
   if (!profile) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-50 flex items-center justify-center">
-        <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full" />
+        <FortuneLoadingScreen stage="chart" />
       </div>
     );
   }
