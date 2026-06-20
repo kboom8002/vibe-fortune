@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TrendingUp, Shield, Sparkles, AlertTriangle, Calendar, Target, BarChart3, Lightbulb } from "lucide-react";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
+import DisclaimerBanner from "@/components/DisclaimerBanner";
 
 export default function MonthlyPage() {
   const [data, setData] = useState<any>(null);
@@ -300,6 +301,9 @@ export default function MonthlyPage() {
           {richData?.vibePrescription && (
             <VibePrescriptionPanel {...richData.vibePrescription} />
           )}
+
+          {/* 면책 조항 */}
+          <DisclaimerBanner levels={['general']} />
         </div>
       </div>
     </div>

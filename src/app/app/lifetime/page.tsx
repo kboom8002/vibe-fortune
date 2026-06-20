@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Clock, Star, TrendingUp, User, Target, ArrowRight } from "lucide-react";
+import DisclaimerBanner from "@/components/DisclaimerBanner";
 
 const ELEMENT_COLORS: Record<string, { bar: string; text: string; bg: string }> = {
   wood: { bar: "bg-emerald-500", text: "text-emerald-400", bg: "bg-emerald-500/10" },
@@ -183,6 +184,19 @@ export default function LifetimePage() {
             </div>
           )}
 
+          {/* LLM Enhanced Deep Analysis */}
+          {data?.llmEnhancedNarrative && (
+            <div className="p-8 rounded-3xl bg-gradient-to-br from-amber-950/30 to-orange-950/20 border border-amber-800/30 backdrop-blur-md space-y-4">
+              <h2 className="text-sm font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-2 border-b border-amber-800/30 pb-3">
+                <Star className="w-4 h-4 text-amber-300" />
+                ✨ AI 심층 분석
+              </h2>
+              <div className="text-base text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {data.llmEnhancedNarrative}
+              </div>
+            </div>
+          )}
+
           {/* Current Decade */}
           {data?.currentDecadeSummary && (
             <div className="p-8 rounded-3xl bg-gradient-to-br from-indigo-950/40 to-purple-950/40 border border-indigo-900/30 backdrop-blur-md space-y-4">
@@ -299,12 +313,8 @@ export default function LifetimePage() {
             </div>
           )}
 
-          {/* Disclaimer */}
-          <div className="text-center pt-4">
-            <p className="text-xs text-zinc-600">
-              인생 총운 분석은 명리학적 구조에 근거한 참고 정보이며, 중요한 의사결정 시 전문가와 상담을 권장합니다.
-            </p>
-          </div>
+          {/* 면책 조항 */}
+          <DisclaimerBanner levels={['general']} />
         </div>
       </main>
     </div>

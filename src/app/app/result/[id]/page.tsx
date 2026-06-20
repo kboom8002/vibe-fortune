@@ -10,6 +10,8 @@ import { calculateChart, calculateMajorLuck, calculateAnnualLuck, calculateAllTe
 import { DomainForecastCard } from "@/components/domain-forecast-card";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
+import { FortuneChatPanel } from "@/components/chat/FortuneChatPanel";
+import DisclaimerBanner from "@/components/DisclaimerBanner";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -1075,12 +1077,23 @@ export default function ForecastResultPage() {
           )}
 
           {/* 면책 조항 */}
-          <div className="text-center pt-4">
-            <p className="text-xs text-zinc-600">
-              최종 판단과 행동의 책임은 사용자 자신에게 있습니다.
-            </p>
-          </div>
+          {(() => {
+            const disclaimerLevels: ('general' | 'health' | 'finance_legal')[] = ['general'];
+            if (richOutput?.domainForecasts?.some((d: any) => d.domain === 'health_recovery')) disclaimerLevels.push('health');
+            if (richOutput?.domainForecasts?.some((d: any) => ['business_finance', 'risk_legal_safety'].includes(d.domain))) disclaimerLevels.push('finance_legal');
+            return <DisclaimerBanner levels={disclaimerLevels} />;
+          })()}
         </div>
+
+          {/* 운세 코치 채팅 패널 */}
+          {chart && forecast && (
+            <FortuneChatPanel
+              chartData={chart}
+              personalContext={(() => { try { const c = localStorage.getItem('personal-context'); return c ? JSON.parse(c) : null; } catch { return null; } })()}
+              forecastSummary={forecast?.summary || ''}
+              forecastId={forecastId || forecastIdStr}
+            />
+          )}
       </main>
     </div>
   );

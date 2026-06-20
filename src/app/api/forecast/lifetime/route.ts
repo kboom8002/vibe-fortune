@@ -369,8 +369,8 @@ export async function POST(request: Request) {
     };
     const strategicAdvice = strategicAdviceMap[dmElement];
 
-    // Build the narrative response structure
-    const lifetimeFortune = {
+    // Build the narrative response structure (deterministic baseline)
+    const lifetimeFortune: Record<string, any> = {
       lifetimeNarrative: generateLifetimeNarrative(chartResult, birthProfile),
       currentDecadeSummary: generateCurrentDecadeSummary(currentMajorLuck, chartResult, birthProfile),
       currentYearSummary: generateCurrentYearSummary(annualLuck, chartResult),
@@ -388,6 +388,90 @@ export async function POST(request: Request) {
       fiveElementDistribution: chartResult.fiveElementDistribution,
       dayMaster: chartResult.dayMaster,
     };
+
+    // --- LLM Enhancement (optional, enriches deterministic baseline) ---
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      try {
+        const fs = await import("fs");
+        const path = await import("path");
+        let lifetimePrompt = "";
+        try {
+          lifetimePrompt = fs.readFileSync(
+            path.join(process.cwd(), "prompts", "lifetime_fortune_writer.md"),
+            "utf-8"
+          );
+        } catch { /* prompt file not found — skip LLM */ }
+
+        if (lifetimePrompt) {
+          const systemPromptPath = path.join(process.cwd(), "prompts", "system.md");
+          let systemPrompt = "You are TCO-Vibe Fortune Coach.";
+          try { systemPrompt = fs.readFileSync(systemPromptPath, "utf-8"); } catch {}
+
+          const contextData = {
+            dayMaster: chartResult.dayMaster,
+            fourPillars: (chartResult as any).fourPillars,
+            elementProfile: (chartResult as any).elementProfile,
+            fiveElementDistribution: chartResult.fiveElementDistribution,
+            majorLuckCycles: majorLuckCycles.map(c => ({
+              ...c,
+              element: resolveElement(c.stem),
+              elementKr: ELEMENT_KR[resolveElement(c.stem)],
+            })),
+            currentMajorLuck: currentMajorLuck ? {
+              ...currentMajorLuck,
+              element: resolveElement(currentMajorLuck.stem),
+            } : null,
+            annualLuck,
+            currentAge,
+            lifeCyclePhase,
+            personalContext: personalContext || null,
+          };
+
+          const userPrompt = `${lifetimePrompt}\n\n---\n## 입력 데이터\n${JSON.stringify(contextData, null, 2)}\n\n## 기존 결정론적 분석 (참고하여 더 풍부하게 확장하세요)\n- 생애 총론: ${lifetimeFortune.lifetimeNarrative}\n- 현재 대운: ${lifetimeFortune.currentDecadeSummary}\n- 올해 세운: ${lifetimeFortune.currentYearSummary}`;
+
+          const isGoogle = !!process.env.GOOGLE_API_KEY;
+
+          if (isGoogle) {
+            // @ts-ignore — optional dependency
+            const { ChatGoogleGenerativeAI } = await import("@langchain/google-genai");
+            const { SystemMessage, HumanMessage } = await import("@langchain/core/messages");
+            const llm = new ChatGoogleGenerativeAI({
+              apiKey: process.env.GOOGLE_API_KEY!,
+              model: process.env.GOOGLE_MODEL || "gemini-2.5-flash",
+              temperature: 0.3,
+            });
+            const response = await llm.invoke([
+              new SystemMessage(systemPrompt),
+              new HumanMessage(userPrompt),
+            ]);
+            const llmText = typeof response.content === "string" ? response.content : "";
+            if (llmText.length > 200) {
+              lifetimeFortune.llmEnhancedNarrative = llmText;
+            }
+          } else {
+            const { ChatOpenAI } = await import("@langchain/openai");
+            const { SystemMessage, HumanMessage } = await import("@langchain/core/messages");
+            const llm = new ChatOpenAI({
+              openAIApiKey: process.env.OPENAI_API_KEY!,
+              modelName: process.env.OPENAI_MODEL || "gpt-4o-mini",
+              temperature: 0.3,
+            });
+            const response = await llm.invoke([
+              new SystemMessage(systemPrompt),
+              new HumanMessage(userPrompt),
+            ]);
+            const llmText = typeof response.content === "string" ? response.content : "";
+            if (llmText.length > 200) {
+              lifetimeFortune.llmEnhancedNarrative = llmText;
+            }
+          }
+        }
+      } catch (llmError) {
+        console.warn("[LifetimeAPI] LLM enhancement failed, using deterministic fallback:", llmError);
+        // Deterministic fallback already set — no action needed
+      }
+    }
 
     return NextResponse.json({
       status: "ok",

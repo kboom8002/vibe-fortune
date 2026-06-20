@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TrendingUp, Target, AlertTriangle, Sparkles, ArrowUpRight, ArrowDownRight, Minus, ShieldAlert, Lightbulb, RefreshCw } from "lucide-react";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
+import DisclaimerBanner from "@/components/DisclaimerBanner";
 
 export default function WeeklyPage() {
   const [data, setData] = useState<any>(null);
@@ -298,6 +299,9 @@ export default function WeeklyPage() {
           {richData?.vibePrescription && (
             <VibePrescriptionPanel {...richData.vibePrescription} />
           )}
+
+          {/* 면책 조항 */}
+          <DisclaimerBanner levels={['general']} />
         </div>
       </div>
     </div>
