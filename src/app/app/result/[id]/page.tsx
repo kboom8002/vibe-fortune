@@ -18,6 +18,7 @@ import DisclaimerBanner from "@/components/DisclaimerBanner";
 import RlhfTransparencyBanner from "@/components/RlhfTransparencyBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import FortuneLoadingScreen from "@/components/FortuneLoadingScreen";
+import FortuneTrendCard from "@/components/FortuneTrendCard";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -853,6 +854,9 @@ export default function ForecastResultPage() {
                   <div className="text-xs text-zinc-400">사주 구조 × 바이브 상태 종합 등급</div>
                 </div>
               </div>
+
+              {/* 운세 트렌드 비교 */}
+              <FortuneTrendCard currentGrade={forecast.grade || "A"} />
 
               {/* 행동 지침 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6" role="region" aria-labelledby="heading-action-guide">

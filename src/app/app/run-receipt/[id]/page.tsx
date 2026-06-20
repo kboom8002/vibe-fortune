@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BookOpen, AlertCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, AlertCircle, Share2, ShieldAlert, Code2, CheckCircle } from "lucide-react";
 
 export default function RunReceiptPage() {
   const router = useRouter();
   const params = useParams();
   const [forecast, setForecast] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
   // Form states
   const [whatIDid, setWhatIDid] = useState("");
@@ -90,6 +91,79 @@ export default function RunReceiptPage() {
             </p>
           </div>
         </div>
+
+        {/* Forecast summary info */}
+        {forecast && (
+          <div className="space-y-4">
+            {/* Summary & Share */}
+            <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">연결된 운세 요약</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 font-semibold">
+                  등급: {forecast.grade || "—"}
+                </span>
+              </div>
+              <p className="text-sm text-zinc-300 leading-relaxed line-clamp-2">
+                {forecast.summary || "운세 요약 없음"}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const date = new Date().toLocaleDateString("ko-KR");
+                  const text = `TCO-Vibe 운세 영수증 | ${date} | 요약: ${forecast.summary || "—"} | 등급: ${forecast.grade || "—"}`;
+                  navigator.clipboard.writeText(text).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2500);
+                  });
+                }}
+                className="w-full gap-2 border-zinc-800 hover:border-indigo-500/40 text-zinc-300 text-xs"
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    클립보드에 복사됨!
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-indigo-400" />
+                    영수증 공유 (Share Receipt)
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Safety Flags */}
+            {forecast.boundaryNotes && forecast.boundaryNotes.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-900/30 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">안전 플래그 (Safety Flags)</span>
+                </div>
+                <ul className="space-y-1.5 pl-6">
+                  {forecast.boundaryNotes.map((note: string, idx: number) => (
+                    <li key={idx} className="text-xs text-amber-300/80 list-disc leading-relaxed">{note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Prompt Versions */}
+            {forecast.promptVersions && (
+              <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/60 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">프롬프트 버전</span>
+                </div>
+                <pre className="text-[11px] text-zinc-500 bg-zinc-950 border border-zinc-800/50 rounded-lg p-3 overflow-x-auto">
+                  {typeof forecast.promptVersions === 'string'
+                    ? forecast.promptVersions
+                    : JSON.stringify(forecast.promptVersions, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-xl text-xs text-red-400 flex items-center gap-2">
