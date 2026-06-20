@@ -2,14 +2,190 @@
 
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
-import { TrendingUp, Target, AlertTriangle, Sparkles, ArrowUpRight, ArrowDownRight, Minus, ShieldAlert, Lightbulb, RefreshCw } from "lucide-react";
+import { TrendingUp, Target, AlertTriangle, Sparkles, ArrowUpRight, ArrowDownRight, Minus, ShieldAlert, Lightbulb, RefreshCw, Zap } from "lucide-react";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
 
+// ── Types & helpers for 7-day rhythm (client-side fallback) ──
+
+type FiveElement = "wood" | "fire" | "earth" | "metal" | "water";
+
+type DailyRhythmEntry = {
+  date: string;
+  dayLabel: string;
+  stem: string;
+  branch: string;
+  element: FiveElement;
+  elementEmoji: string;
+  energyLevel: "high" | "medium" | "low";
+  focusArea: string;
+};
+
+const ELEMENT_EMOJI: Record<FiveElement, string> = {
+  wood: "🌿", fire: "🔥", earth: "⛰️", metal: "⚙️", water: "💧",
+};
+
+const ELEMENT_FOCUS: Record<FiveElement, string> = {
+  wood: "성장·학습", fire: "표현·네트워킹", earth: "안정·실행",
+  metal: "정리·마감", water: "회복·전략",
+};
+
+// Fallback element mapping for stems (Korean → element)
+const STEM_ELEMENT_MAP: Record<string, FiveElement> = {
+  "甲": "wood", "乙": "wood", "丙": "fire", "丁": "fire",
+  "戊": "earth", "己": "earth", "庚": "metal", "辛": "metal",
+  "壬": "water", "癸": "water",
+};
+
+const GENERATING: Record<FiveElement, FiveElement> = {
+  wood: "fire", fire: "earth", earth: "metal", metal: "water", water: "wood",
+};
+
+function getEnergyLevel(dmElement: FiveElement, dayElement: FiveElement): "high" | "medium" | "low" {
+  if (dmElement === dayElement) return "medium";
+  if (GENERATING[dmElement] === dayElement || GENERATING[dayElement] === dmElement) return "high";
+  return "low";
+}
+
+const ENERGY_VALUE: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
+// ─────────────────────────────────────────────────────────
+
+/** 7-Day Energy Rhythm Bar Chart (pure SVG, no external libs) */
+function DailyRhythmChart({ rhythm }: { rhythm: DailyRhythmEntry[] }) {
+  if (!rhythm || rhythm.length === 0) return null;
+
+  const maxEnergy = 3;
+  const barWidth = 40;
+  const barGap = 16;
+  const chartWidth = rhythm.length * (barWidth + barGap) - barGap;
+  const chartHeight = 120;
+  const bottomPadding = 56;
+  const topPadding = 24;
+  const svgHeight = chartHeight + bottomPadding + topPadding;
+  const svgWidth = chartWidth + 32;
+
+  const highDays = rhythm.filter(r => r.energyLevel === "high");
+
+  const barColor = (level: string) => {
+    if (level === "high") return "#10b981";   // emerald-500
+    if (level === "medium") return "#3b82f6"; // blue-500
+    return "#71717a";                          // zinc-500
+  };
+
+  return (
+    <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+      <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+        <Zap className="w-4 h-4 text-emerald-400" />
+        이번 주 7일 에너지 리듬
+      </h3>
+
+      {highDays.length > 0 && (
+        <div className="px-3 py-2 rounded-xl bg-emerald-950/30 border border-emerald-900/30">
+          <p className="text-xs text-emerald-400 font-medium">
+            ✨ 이번 주 최적 행동일: {highDays.map(d => d.dayLabel).join(", ")}
+          </p>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <svg
+          width={svgWidth}
+          height={svgHeight}
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+          className="mx-auto"
+        >
+          {rhythm.map((entry, i) => {
+            const x = 16 + i * (barWidth + barGap);
+            const val = ENERGY_VALUE[entry.energyLevel] || 1;
+            const barH = (val / maxEnergy) * chartHeight;
+            const y = topPadding + (chartHeight - barH);
+            const color = barColor(entry.energyLevel);
+            const isHigh = entry.energyLevel === "high";
+
+            return (
+              <g key={i}>
+                {/* Bar */}
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={barH}
+                  rx={6}
+                  fill={color}
+                  opacity={isHigh ? 1 : 0.7}
+                />
+                {/* Glow effect for high energy */}
+                {isHigh && (
+                  <rect
+                    x={x - 2}
+                    y={y - 2}
+                    width={barWidth + 4}
+                    height={barH + 4}
+                    rx={8}
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth={1}
+                    opacity={0.4}
+                  />
+                )}
+                {/* Energy level label on top */}
+                <text
+                  x={x + barWidth / 2}
+                  y={y - 6}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fill={color}
+                  fontWeight={600}
+                >
+                  {entry.energyLevel === "high" ? "▲" : entry.energyLevel === "medium" ? "●" : "▽"}
+                </text>
+                {/* Day label */}
+                <text
+                  x={x + barWidth / 2}
+                  y={topPadding + chartHeight + 16}
+                  textAnchor="middle"
+                  fontSize={13}
+                  fill={isHigh ? "#10b981" : "#a1a1aa"}
+                  fontWeight={isHigh ? 700 : 500}
+                >
+                  {entry.dayLabel}
+                </text>
+                {/* Element emoji */}
+                <text
+                  x={x + barWidth / 2}
+                  y={topPadding + chartHeight + 34}
+                  textAnchor="middle"
+                  fontSize={14}
+                >
+                  {entry.elementEmoji}
+                </text>
+                {/* Focus keyword */}
+                <text
+                  x={x + barWidth / 2}
+                  y={topPadding + chartHeight + 50}
+                  textAnchor="middle"
+                  fontSize={8}
+                  fill="#71717a"
+                >
+                  {entry.focusArea}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+
 export default function WeeklyPage() {
   const [data, setData] = useState<any>(null);
   const [richData, setRichData] = useState<any>(null);
+  const [dailyRhythm, setDailyRhythm] = useState<DailyRhythmEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,6 +212,14 @@ export default function WeeklyPage() {
 
         if (res.ok) {
           const apiData = await res.json();
+
+          // Capture dailyRhythm from API or generate fallback
+          if (apiData.dailyRhythm && apiData.dailyRhythm.length > 0) {
+            setDailyRhythm(apiData.dailyRhythm);
+          } else {
+            generateLocalDailyRhythm();
+          }
+
           if (apiData.forecastOutput) {
             const fo = apiData.forecastOutput;
             const mapped = {
@@ -68,11 +252,69 @@ export default function WeeklyPage() {
           }
         } else {
           generateLocalWeekly();
+          generateLocalDailyRhythm();
         }
       } catch {
         generateLocalWeekly();
+        generateLocalDailyRhythm();
       } finally {
         setLoading(false);
+      }
+    };
+
+    /** Generate local 7-day rhythm from localStorage chart data */
+    const generateLocalDailyRhythm = () => {
+      try {
+        const storedChart = localStorage.getItem("user-manse-chart");
+        if (!storedChart) return;
+
+        const chart = JSON.parse(storedChart);
+        const dmElement: FiveElement = (chart.dayMaster?.element as FiveElement) || "earth";
+
+        // Simple deterministic fallback using day-of-week index cycling through 60 甲子
+        const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+        const STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+        const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+
+        // Get Monday of current week
+        const now = new Date();
+        const day = now.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() + diff);
+
+        // Use Julian Day Number approximation for stem/branch index
+        const rhythm: DailyRhythmEntry[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+
+          // Approximate JDN for stem/branch cycling
+          const y = d.getFullYear();
+          const m = d.getMonth() + 1;
+          const dd = d.getDate();
+          const jdn = Math.floor(367 * y - Math.floor(7 * (y + Math.floor((m + 9) / 12)) / 4) + Math.floor(275 * m / 9) + dd + 1721013.5);
+          const stemIdx = ((jdn - 1) % 10 + 10) % 10;
+          const branchIdx = ((jdn - 1) % 12 + 12) % 12;
+
+          const stem = STEMS[stemIdx];
+          const element = STEM_ELEMENT_MAP[stem] || "earth";
+          const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+
+          rhythm.push({
+            date: dateStr,
+            dayLabel: DAY_LABELS[i],
+            stem,
+            branch: BRANCHES[branchIdx],
+            element,
+            elementEmoji: ELEMENT_EMOJI[element],
+            energyLevel: getEnergyLevel(dmElement, element),
+            focusArea: ELEMENT_FOCUS[element],
+          });
+        }
+        setDailyRhythm(rhythm);
+      } catch {
+        // Ignore fallback generation errors
       }
     };
 
@@ -191,6 +433,9 @@ export default function WeeklyPage() {
         )}
 
         <div className="space-y-6">
+          {/* 7-Day Energy Rhythm (BEFORE conclusion) */}
+          <DailyRhythmChart rhythm={dailyRhythm} />
+
           {/* Conclusion */}
           <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md">
             <p className="text-lg text-zinc-200 leading-relaxed font-medium">{mockData.conclusion}</p>

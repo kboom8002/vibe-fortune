@@ -2,14 +2,82 @@
 
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
-import { TrendingUp, Shield, Sparkles, AlertTriangle, Calendar, Target, BarChart3, Lightbulb } from "lucide-react";
+import { TrendingUp, Shield, Sparkles, AlertTriangle, Calendar, Target, BarChart3, Lightbulb, Layers } from "lucide-react";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
 
+// ── Types for 4-week breakdown ──
+type FiveElement = "wood" | "fire" | "earth" | "metal" | "water";
+type DomainKey = "career" | "finance" | "relationship" | "health" | "creativity" | "learning";
+
+interface WeekBreakdown {
+  weekLabel: string;
+  dominantElement: FiveElement;
+  elementEmoji: string;
+  theme: string;
+  strategy: string;
+  domains: { key: DomainKey; label: string; energy: "high" | "medium" | "low" }[];
+}
+
+const ENERGY_COLORS: Record<string, string> = {
+  high: "bg-emerald-500/60",
+  medium: "bg-blue-500/40",
+  low: "bg-zinc-700/40",
+};
+
+const ELEMENT_BG: Record<FiveElement, string> = {
+  wood: "from-emerald-950/40 to-emerald-900/20",
+  fire: "from-rose-950/40 to-rose-900/20",
+  earth: "from-amber-950/40 to-amber-900/20",
+  metal: "from-zinc-800/40 to-zinc-700/20",
+  water: "from-blue-950/40 to-blue-900/20",
+};
+
+const ELEMENT_THEME: Record<FiveElement, string> = {
+  wood: "성장·확장", fire: "표현·실행", earth: "안정·축적",
+  metal: "정리·최적화", water: "회복·전략",
+};
+
+const ELEMENT_EMOJI: Record<FiveElement, string> = {
+  wood: "🌿", fire: "🔥", earth: "⛰️", metal: "⚙️", water: "💧",
+};
+
+const ELEMENT_STRATEGY: Record<FiveElement, string> = {
+  wood: "새로운 기회를 탐색하고 성장 동력을 확보하세요",
+  fire: "적극적으로 표현하고 핵심 프로젝트를 추진하세요",
+  earth: "기반을 다지고 안정적인 루틴을 유지하세요",
+  metal: "불필요한 것을 정리하고 효율을 극대화하세요",
+  water: "충분히 쉬며 전략적 사고에 시간을 투자하세요",
+};
+
+const DOMAINS: DomainKey[] = ["career", "finance", "relationship", "health", "creativity", "learning"];
+const DOMAIN_LABELS: Record<DomainKey, string> = {
+  career: "커리어", finance: "재무", relationship: "관계",
+  health: "건강", creativity: "창의", learning: "학습",
+};
+
+const DOMAIN_ELEMENT_AFFINITY: Record<DomainKey, Record<FiveElement, "high" | "medium" | "low">> = {
+  career:       { wood: "high",   fire: "high",   earth: "medium", metal: "medium", water: "low" },
+  finance:      { wood: "low",    fire: "low",    earth: "high",   metal: "high",   water: "medium" },
+  relationship: { wood: "medium", fire: "high",   earth: "medium", metal: "low",    water: "high" },
+  health:       { wood: "high",   fire: "medium", earth: "high",   metal: "low",    water: "high" },
+  creativity:   { wood: "high",   fire: "high",   earth: "low",    metal: "medium", water: "high" },
+  learning:     { wood: "high",   fire: "medium", earth: "medium", metal: "high",   water: "high" },
+};
+
+const STEM_ELEMENT_MAP: Record<string, FiveElement> = {
+  "甲": "wood", "乙": "wood", "丙": "fire", "丁": "fire",
+  "戊": "earth", "己": "earth", "庚": "metal", "辛": "metal",
+  "壬": "water", "癸": "water",
+};
+
+// ─────────────────────────────────────────────────────────
+
 export default function MonthlyPage() {
   const [data, setData] = useState<any>(null);
   const [richData, setRichData] = useState<any>(null);
+  const [weeklyBreakdown, setWeeklyBreakdown] = useState<WeekBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -18,7 +86,6 @@ export default function MonthlyPage() {
       try {
         const month = new Date().toISOString().substring(0, 7);
 
-        // Load personal context
         let personalContext: any = undefined;
         try {
           const storedCtx = localStorage.getItem("personal-context");
@@ -33,6 +100,13 @@ export default function MonthlyPage() {
 
         if (res.ok) {
           const apiData = await res.json();
+
+          if (apiData.weeklyBreakdown && apiData.weeklyBreakdown.length > 0) {
+            setWeeklyBreakdown(apiData.weeklyBreakdown);
+          } else {
+            generateLocalWeeklyBreakdown();
+          }
+
           if (apiData.forecastOutput) {
             const fo = apiData.forecastOutput;
             const mapped = {
@@ -59,7 +133,6 @@ export default function MonthlyPage() {
             };
             localStorage.setItem("monthly-forecast-cache", JSON.stringify(mapped));
             setData(mapped);
-            // Capture rich output
             if (apiData.richOutput) {
               setRichData(apiData.richOutput);
             }
@@ -68,12 +141,51 @@ export default function MonthlyPage() {
           }
         } else {
           generateLocalMonthly();
+          generateLocalWeeklyBreakdown();
         }
       } catch {
         generateLocalMonthly();
+        generateLocalWeeklyBreakdown();
       } finally {
         setLoading(false);
       }
+    };
+
+    const generateLocalWeeklyBreakdown = () => {
+      try {
+        const STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+        const WEEK_LABELS = ["1주차", "2주차", "3주차", "4주차"];
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const breakdown: WeekBreakdown[] = [];
+
+        for (let w = 0; w < 4; w++) {
+          const midDay = Math.min(1 + w * 7 + 3, new Date(year, month, 0).getDate());
+          const d = new Date(year, month - 1, midDay);
+          const y = d.getFullYear();
+          const m = d.getMonth() + 1;
+          const dd = d.getDate();
+          const jdn = Math.floor(367 * y - Math.floor(7 * (y + Math.floor((m + 9) / 12)) / 4) + Math.floor(275 * m / 9) + dd + 1721013.5);
+          const stemIdx = ((jdn - 1) % 10 + 10) % 10;
+          const stem = STEMS[stemIdx];
+          const element: FiveElement = STEM_ELEMENT_MAP[stem] || "earth";
+
+          breakdown.push({
+            weekLabel: WEEK_LABELS[w],
+            dominantElement: element,
+            elementEmoji: ELEMENT_EMOJI[element],
+            theme: ELEMENT_THEME[element],
+            strategy: ELEMENT_STRATEGY[element],
+            domains: DOMAINS.map(dk => ({
+              key: dk,
+              label: DOMAIN_LABELS[dk],
+              energy: DOMAIN_ELEMENT_AFFINITY[dk][element],
+            })),
+          });
+        }
+        setWeeklyBreakdown(breakdown);
+      } catch {}
     };
 
     const generateLocalMonthly = () => {
@@ -82,72 +194,22 @@ export default function MonthlyPage() {
         setData(JSON.parse(cached));
         return;
       }
-
-      // Use stored chart for personalized data
       const storedChart = localStorage.getItem("user-manse-chart");
       let dmElement = "토";
       if (storedChart) {
-        try { dmElement = JSON.parse(storedChart).dayMaster?.element || "토"; } catch { /* */ }
+        try { dmElement = JSON.parse(storedChart).dayMaster?.element || "토"; } catch { }
       }
       const elementMap: Record<string, string> = { "木": "목성(木)", "火": "화성(火)", "土": "토성(土)", "金": "금성(金)", "水": "수성(水)", "목": "목성(木)", "화": "화성(火)", "토": "토성(土)", "금": "금성(金)", "수": "수성(水)" };
 
       const monthlyData = {
-        conclusion: `이번 달은 ${elementMap[dmElement] || "토성(土)"}의 영향으로 내면 탐색과 전략 수립에 적합합니다. 대외적 확장보다 내실 다지기에 집중하세요.`,
-        conceptPortfolio: [
-          { name: "재정비", weight: 0.4, state: "cleanup" },
-          { name: "학습", weight: 0.3, state: "expansion" },
-          { name: "관계정리", weight: 0.3, state: "consolidation" },
-        ],
-        riskPortfolio: [
-          { domain: "재무", level: "medium", note: "불필요한 지출 모니터링 필요" },
-          { domain: "건강", level: "low", note: "수면 패턴 안정적" },
-          { domain: "관계", level: "high", note: "핵심 관계 재정립 시점" },
-        ],
-        threePillars: {
-          revenue: { score: 65, advice: "보수적 운영, 기존 매출원 최적화" },
-          relationship: { score: 45, advice: "핵심 인맥 3인에 집중, 확장 자제" },
-          recovery: { score: 80, advice: "규칙적 수면과 주 2회 운동 유지" },
-        },
-        actionCalendar: [
-          { week: "1주차", focus: "현황 진단 및 데이터 수집" },
-          { week: "2주차", focus: "핵심 프로젝트 정리 및 우선순위 재설정" },
-          { week: "3주차", focus: "관계 재정립 미팅 및 소통" },
-          { week: "4주차", focus: "월간 회고 및 다음 달 전략 수립" },
-        ],
+        conclusion: `이번 달은 ${elementMap[dmElement] || "토성(土)"}의 영향으로 내면 탐색과 전략 수립에 적합합니다.`,
+        conceptPortfolio: [{ name: "재정비", weight: 0.4, state: "cleanup" }, { name: "학습", weight: 0.3, state: "expansion" }, { name: "관계정리", weight: 0.3, state: "consolidation" }],
+        riskPortfolio: [{ domain: "재무", level: "medium", note: "불필요한 지출 모니터링 필요" }, { domain: "건강", level: "low", note: "수면 패턴 안정적" }, { domain: "관계", level: "high", note: "핵심 관계 재정립 시점" }],
+        threePillars: { revenue: { score: 65, advice: "보수적 운영, 기존 매출원 최적화" }, relationship: { score: 45, advice: "핵심 인맥 3인에 집중, 확장 자제" }, recovery: { score: 80, advice: "규칙적 수면과 주 2회 운동 유지" } },
+        actionCalendar: [{ week: "1주차", focus: "현황 진단" }, { week: "2주차", focus: "우선순위 재설정" }, { week: "3주차", focus: "관계 소통" }, { week: "4주차", focus: "회고" }],
       };
       localStorage.setItem("monthly-forecast-cache", JSON.stringify(monthlyData));
       setData(monthlyData);
-
-      // Local richOutput for monthly
-      const storedChartForRich = localStorage.getItem("user-manse-chart");
-      const chartForRich = storedChartForRich ? JSON.parse(storedChartForRich) : null;
-      if (chartForRich) {
-        const dm = chartForRich.dayMaster;
-        setRichData({
-          gapAnalysis: {
-            conceptGaps: ['이번 달 전략적 우선순위 재검토가 필요합니다'],
-            evidenceGaps: ['월간 목표 달성률을 중간 점검하세요'],
-            boundaryGaps: ['이번 달 새로 맡은 역할의 범위를 명확히 하세요'],
-            conversionGaps: ['이번 달 핵심 목표를 주별 실행 계획으로 분해하세요'],
-          },
-          vibePrescription: {
-            homomorphic: {
-              element: dm?.element === '목' || dm?.element === '木' ? 'wood' : 'earth',
-              label: '이번 달 핵심 기운을 키우는 처방',
-              rationale: `일간 ${dm?.stem || '?'}(${dm?.element || '?'})의 월간 에너지 흐름에 맞춰 핵심 역량을 강화하세요.`,
-              actions: ['월간 핵심 목표 1개 설정', '매주 진척 기록'],
-              sensory: { color: '일간 친화 색상', light: '안정적 조명', space: '체계적 환경', rhythm: '집중 음악', ritual: '월초 계획 세션' },
-            },
-            complementary: {
-              element: 'water',
-              label: '이번 달 회복 에너지를 확보하는 처방',
-              rationale: '한 달간의 지속 가능성을 위해 회복과 유연성의 에너지를 보충하세요.',
-              actions: ['주 1회 완전한 휴식일 확보', '월 1회 새로운 경험'],
-              sensory: { color: '남색·검정', light: '간접 조명', space: '자연 속 공간', rhythm: '힐링 사운드', ritual: '월말 성찰 시간' },
-            },
-          },
-        });
-      }
     };
 
     fetchData();
@@ -157,11 +219,7 @@ export default function MonthlyPage() {
     conclusion: "",
     conceptPortfolio: [],
     riskPortfolio: [],
-    threePillars: {
-      revenue: { score: 0, advice: "" },
-      relationship: { score: 0, advice: "" },
-      recovery: { score: 0, advice: "" },
-    },
+    threePillars: { revenue: { score: 0, advice: "" }, relationship: { score: 0, advice: "" }, recovery: { score: 0, advice: "" } },
     actionCalendar: [],
   };
 
@@ -179,9 +237,6 @@ export default function MonthlyPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">
       <Navbar />
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-900/10 blur-glow pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/10 blur-glow pointer-events-none" />
-
       <div className="max-w-4xl mx-auto w-full px-6 py-12 relative z-10 flex-1">
         <div className="text-center mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3">
@@ -189,13 +244,59 @@ export default function MonthlyPage() {
           </h1>
         </div>
 
-        {error && (
-          <div role="alert" className="p-3 bg-red-950/40 border border-red-900/50 rounded-xl text-xs text-red-400 text-center mb-6">
-            {error}
-          </div>
-        )}
-
         <div className="space-y-6">
+          {/* 4-Week Strategy Calendar & Heatmap */}
+          {weeklyBreakdown.length > 0 && (
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-400" />
+                이번 달 4주 전략 캘린더
+              </h3>
+
+              <div className="grid grid-cols-2 gap-3">
+                {weeklyBreakdown.map((w, i) => (
+                  <div key={i} className={`p-4 rounded-2xl bg-gradient-to-br ${ELEMENT_BG[w.dominantElement]} border border-zinc-800/50 space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-300">{w.weekLabel}</span>
+                      <span className="text-lg">{w.elementEmoji}</span>
+                    </div>
+                    <p className="text-sm font-medium text-zinc-200">{w.theme}</p>
+                    <p className="text-xs text-zinc-400 leading-relaxed">{w.strategy}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">영역별 에너지 히트맵</h4>
+                <div className="grid gap-1" style={{ gridTemplateColumns: '80px repeat(4, 1fr)' }}>
+                  <div />
+                  {weeklyBreakdown.map((w, i) => (
+                    <div key={i} className="text-center text-[10px] text-zinc-500 font-medium pb-1">{w.weekLabel}</div>
+                  ))}
+                  {weeklyBreakdown[0]?.domains.map((domain, di) => (
+                    <>
+                      <div key={`label-${di}`} className="text-xs text-zinc-400 flex items-center">{domain.label}</div>
+                      {weeklyBreakdown.map((w, wi) => {
+                        const energy = w.domains[di]?.energy || 'low';
+                        return (
+                          <div
+                            key={`${di}-${wi}`}
+                            className={`h-6 rounded ${ENERGY_COLORS[energy]} flex items-center justify-center`}
+                            title={`${domain.label} ${w.weekLabel}: ${energy}`}
+                          >
+                            <span className="text-[8px] text-zinc-300 font-medium">
+                              {energy === 'high' ? '▲' : energy === 'medium' ? '●' : '▽'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Conclusion */}
           <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md">
             <p className="text-lg text-zinc-200 leading-relaxed font-medium">{mockData.conclusion}</p>

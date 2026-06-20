@@ -11,6 +11,7 @@ import { DomainForecastCard } from "@/components/domain-forecast-card";
 import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
 import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 import { ConceptActivationPanel } from "@/components/ConceptActivationPanel";
+import { ContextMappingPanel } from "@/components/ContextMappingPanel";
 import { OperatorTracePanel } from "@/components/OperatorTracePanel";
 import { FortuneChatPanel } from "@/components/chat/FortuneChatPanel";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
@@ -548,6 +549,9 @@ export default function ForecastResultPage() {
 
           {/* RLHF 투명성 배너 */}
           <RlhfTransparencyBanner />
+
+          {/* 개인 맥락 → 운세 영역 매핑 */}
+          <ContextMappingPanel personalContext={(() => { try { const c = localStorage.getItem('personal-context'); return c ? JSON.parse(c) : undefined; } catch { return undefined; } })()} />
 
           {/* ═══════════════════════════════════════════════ */}
           {/* 사주 팔자 차트 (즉시 표시) */}
