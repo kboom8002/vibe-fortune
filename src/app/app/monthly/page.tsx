@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { TrendingUp, Shield, Sparkles, AlertTriangle, Calendar, Target, BarChart3, Lightbulb } from "lucide-react";
+import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
+import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 
 export default function MonthlyPage() {
   const [data, setData] = useState<any>(null);
+  const [richData, setRichData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -14,10 +17,17 @@ export default function MonthlyPage() {
       try {
         const month = new Date().toISOString().substring(0, 7);
 
+        // Load personal context
+        let personalContext: any = undefined;
+        try {
+          const storedCtx = localStorage.getItem("personal-context");
+          if (storedCtx) personalContext = JSON.parse(storedCtx);
+        } catch { /* ignore */ }
+
         const res = await fetch("/api/forecast/monthly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetMonth: month, currentFocus: ["business_finance"] }),
+          body: JSON.stringify({ targetMonth: month, currentFocus: ["business_finance"], personalContext }),
         });
 
         if (res.ok) {
@@ -48,6 +58,10 @@ export default function MonthlyPage() {
             };
             localStorage.setItem("monthly-forecast-cache", JSON.stringify(mapped));
             setData(mapped);
+            // Capture rich output
+            if (apiData.richOutput) {
+              setRichData(apiData.richOutput);
+            }
           } else {
             generateLocalMonthly();
           }
@@ -245,6 +259,16 @@ export default function MonthlyPage() {
               ))}
             </div>
           </div>
+
+          {/* GAP Analysis (from richOutput) */}
+          {richData?.gapAnalysis && (
+            <GapAnalysisPanel gapAnalysis={richData.gapAnalysis} />
+          )}
+
+          {/* Vibe Prescription (from richOutput) */}
+          {richData?.vibePrescription && (
+            <VibePrescriptionPanel {...richData.vibePrescription} />
+          )}
         </div>
       </div>
     </div>

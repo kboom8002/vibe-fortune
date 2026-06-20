@@ -7,6 +7,9 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { calculateChart, calculateMajorLuck, calculateAnnualLuck, calculateAllTenGods, analyzeInteractions, analyzeDivineKillers } from "@/lib/manse";
+import { DomainForecastCard } from "@/components/domain-forecast-card";
+import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
+import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 import {
   Sparkles, ShieldAlert, Flame, Brain, Activity, Calendar, AlertTriangle,
   RotateCcw, BookOpen, XCircle, HelpCircle, Clock, TrendingUp, Zap, Target,
@@ -49,6 +52,9 @@ export default function ForecastResultPage() {
   const [divineKillers, setDivineKillers] = useState<any[]>([]);
   const [vibe, setVibe] = useState<any>(null);
   const [forecast, setForecast] = useState<any>(null);
+  const [outputData, setOutputData] = useState<any>(null);
+  const [conceptState, setConceptState] = useState<any>(null);
+  const [richOutput, setRichOutput] = useState<any>(null);
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState("");
   
@@ -140,6 +146,13 @@ export default function ForecastResultPage() {
     setLlmLoading(true);
     setLlmError("");
     try {
+      // Load personal context for AI personalization
+      let personalContext: any = undefined;
+      try {
+        const storedCtx = localStorage.getItem("personal-context");
+        if (storedCtx) personalContext = JSON.parse(storedCtx);
+      } catch { /* ignore parse errors */ }
+
       const res = await fetch("/api/forecast/daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,6 +162,7 @@ export default function ForecastResultPage() {
           vibeCheckIn: vibeData,
           birthProfile: profileData,
           providedChart: chartResult,
+          personalContext,
         }),
       });
 
@@ -176,6 +190,13 @@ export default function ForecastResultPage() {
           } else {
             setForecast(mappedForecast);
             setForecastId(fo.id || forecastIdStr || "");
+            // Store full output data for extended sections
+            setOutputData(fo.outputJson || {});
+            // Read richOutput from API response
+            if (data.richOutput) {
+              setRichOutput(data.richOutput);
+            }
+            setConceptState((fo.outputJson as any)?.conceptState || null);
             if (data.estimatedVibe) {
               setEstimatedVibe(data.estimatedVibe);
             } else {
@@ -679,6 +700,60 @@ export default function ForecastResultPage() {
                 </div>
               </div>
 
+              {/* === RICH OUTPUT SECTIONS === */}
+              {richOutput && (
+                <>
+                  {/* Structural Prior Summary */}
+                  {richOutput.structuralPriorSummary && (
+                    <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md">
+                      <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-indigo-400" />
+                        구조적 사전값 요약
+                      </h3>
+                      <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                        {richOutput.structuralPriorSummary}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Vibe Summary */}
+                  {richOutput.vibeSummary && (
+                    <div className="p-6 rounded-3xl bg-zinc-900/30 border border-purple-900/30 backdrop-blur-md">
+                      <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-purple-400" />
+                        바이브 × 오행 해석
+                      </h3>
+                      <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                        {richOutput.vibeSummary}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 6대 영역별 상세 운세 */}
+                  {richOutput.domainForecasts && richOutput.domainForecasts.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2 px-1">
+                        <Target className="w-4 h-4 text-emerald-400" />
+                        6대 영역별 상세 운세
+                      </h3>
+                      {richOutput.domainForecasts.map((df: any) => (
+                        <DomainForecastCard key={df.domain} forecast={df} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Vibe 처방 */}
+                  {richOutput.vibePrescription && (
+                    <VibePrescriptionPanel {...richOutput.vibePrescription} />
+                  )}
+
+                  {/* GAP 분석 */}
+                  {richOutput.gapAnalysis && (
+                    <GapAnalysisPanel gapAnalysis={richOutput.gapAnalysis} />
+                  )}
+                </>
+              )}
+
               {/* 오늘의 피드백 및 RLHF 조정 폼 */}
               <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
                 <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
@@ -813,3 +888,5 @@ export default function ForecastResultPage() {
     </div>
   );
 }
+
+

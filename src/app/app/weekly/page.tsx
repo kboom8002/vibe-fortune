@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { TrendingUp, Target, AlertTriangle, Sparkles, ArrowUpRight, ArrowDownRight, Minus, ShieldAlert, Lightbulb, RefreshCw } from "lucide-react";
+import { GapAnalysisPanel } from "@/components/gap-analysis-panel";
+import { VibePrescriptionPanel } from "@/components/vibe-prescription-panel";
 
 export default function WeeklyPage() {
   const [data, setData] = useState<any>(null);
+  const [richData, setRichData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -17,10 +20,17 @@ export default function WeeklyPage() {
         const toDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         const to = toDate.toISOString().split("T")[0];
 
+        // Load personal context for API personalization
+        let personalContext: any = undefined;
+        try {
+          const storedCtx = localStorage.getItem("personal-context");
+          if (storedCtx) personalContext = JSON.parse(storedCtx);
+        } catch { /* ignore */ }
+
         const res = await fetch("/api/forecast/weekly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetWeekStart: from, currentFocus: ["business_finance"] }),
+          body: JSON.stringify({ targetWeekStart: from, currentFocus: ["business_finance"], personalContext }),
         });
 
         if (res.ok) {
@@ -48,6 +58,10 @@ export default function WeeklyPage() {
             };
             localStorage.setItem("weekly-forecast-cache", JSON.stringify(mapped));
             setData(mapped);
+            // Capture rich output data
+            if (apiData.richOutput) {
+              setRichData(apiData.richOutput);
+            }
           } else {
             generateLocalWeekly();
           }
@@ -243,6 +257,16 @@ export default function WeeklyPage() {
             </h3>
             <p className="text-sm text-zinc-400 italic leading-relaxed">&ldquo;{mockData.reflection}&rdquo;</p>
           </div>
+
+          {/* GAP Analysis (from richOutput) */}
+          {richData?.gapAnalysis && (
+            <GapAnalysisPanel gapAnalysis={richData.gapAnalysis} />
+          )}
+
+          {/* Vibe Prescription (from richOutput) */}
+          {richData?.vibePrescription && (
+            <VibePrescriptionPanel {...richData.vibePrescription} />
+          )}
         </div>
       </div>
     </div>

@@ -108,9 +108,15 @@ export const VibeFortuneAgentStateSchema = z.object({
   actionPolicy: ActionPolicySchema.optional(),
   // 도메인별 세분화 정책: DomainActionPolicy 배열
   domainActionPolicies: z.array(DomainActionPolicySchema).optional(),
+  // 오행 감각 처방 (동형/상보)
+  vibePrescription: z.unknown().optional(),
+  // 종합 일일 등급 (S/A/B/C/D)
+  autoGrade: z.enum(["S", "A", "B", "C", "D"]).optional(),
 
   draftOutput: z.unknown().optional(),
   finalOutput: ForecastOutputSchema.optional(),
+  // Rich output aggregated by FinalResponseNode (6-domain forecasts, vibePrescription, gapAnalysis)
+  richOutput: z.record(z.string(), z.unknown()).optional(),
 
   safetyFlags: z.array(SafetyFlagSchema).default([]),
   warnings: z.array(AgentWarningSchema).default([]),

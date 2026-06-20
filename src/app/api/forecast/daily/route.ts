@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     }
 
     const { targetDate, currentFocus, userMessage, vibeCheckIn } = parsed.data;
+    const personalContext = body.personalContext || undefined;
 
     // 2. Build initial LangGraph Agent State
     // In actual app, we would load the birth profile of the user from database.
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
       },
       birthProfile,
       vibeCheckIn: parsedVibe,
+      personalContext,
       safetyFlags: [],
       warnings: [],
       errors: [],
@@ -112,6 +114,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       status,
       forecastOutput: finalState.finalOutput,
+      richOutput: finalState.richOutput || {},
       estimatedVibe: finalState.estimatedVibe,
       warnings: finalState.warnings,
       safetyFlags: finalState.safetyFlags,

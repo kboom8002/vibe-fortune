@@ -14,6 +14,7 @@ export function Navbar() {
     { href: "/app/daily", label: "일일 분석" },
     { href: "/app/weekly", label: "주간 분석" },
     { href: "/app/monthly", label: "월간 분석" },
+    { href: "/app/lifetime", label: "인생 총운" },
     { href: "/app/history", label: "분석 기록" },
     { href: "/app/settings", label: "설정" },
   ];

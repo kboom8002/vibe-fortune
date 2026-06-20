@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
-import { Shield, Download, Trash2, User, Lock, Database } from "lucide-react";
+import { Shield, Download, Trash2, User, Lock, Database, Save, CheckCircle, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null);
+  const [personalCtx, setPersonalCtx] = useState<any>({});
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -37,6 +39,12 @@ export default function SettingsPage() {
       }
     };
     fetchProfile();
+
+    // Load personal context
+    const storedCtx = localStorage.getItem("personal-context");
+    if (storedCtx) {
+      try { setPersonalCtx(JSON.parse(storedCtx)); } catch {}
+    }
   }, []);
 
   const handleExport = () => {
@@ -60,6 +68,20 @@ export default function SettingsPage() {
       window.location.href = "/";
     }
   };
+
+  const handleSavePersonalCtx = () => {
+    localStorage.setItem("personal-context", JSON.stringify(personalCtx));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const updateCtx = (key: string, value: string) => {
+    setPersonalCtx((prev: any) => ({ ...prev, [key]: value || undefined }));
+  };
+
+  const inputClass = "w-full bg-zinc-900/60 border border-zinc-700/60 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 transition-colors";
+  const selectClass = "w-full bg-zinc-900/60 border border-zinc-700/60 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500/50 transition-colors";
+  const labelClass = "text-xs text-zinc-400 uppercase tracking-wider mb-1 block";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col relative overflow-x-hidden font-sans">
@@ -119,6 +141,103 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {/* Personal Context */}
+          <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-amber-400" />
+                개인 맥락 (AI 정밀화용)
+              </h2>
+              {saved && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  저장됨
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              입력한 정보는 기기에만 저장되며, AI 포캐스트를 개인 상황에 맞게 정밀화하는 데만 사용됩니다.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>직업/역할</label>
+                <input className={inputClass} placeholder="예: 스타트업 창업자, 마케터..." value={personalCtx.occupation || ""} onChange={e => updateCtx("occupation", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>업종/분야</label>
+                <input className={inputClass} placeholder="예: IT, 교육, 금융..." value={personalCtx.industry || ""} onChange={e => updateCtx("industry", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>경력 단계</label>
+                <select className={selectClass} value={personalCtx.careerStage || ""} onChange={e => updateCtx("careerStage", e.target.value)}>
+                  <option value="">선택 안 함</option>
+                  <option value="entry">초기 커리어</option>
+                  <option value="growth">성장기</option>
+                  <option value="senior">시니어</option>
+                  <option value="executive">임원</option>
+                  <option value="freelance">프리랜서</option>
+                  <option value="founder">창업자</option>
+                  <option value="transition">전환기</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>관계 상태</label>
+                <select className={selectClass} value={personalCtx.relationshipStatus || ""} onChange={e => updateCtx("relationshipStatus", e.target.value)}>
+                  <option value="">선택 안 함</option>
+                  <option value="single">싱글</option>
+                  <option value="dating">연애 중</option>
+                  <option value="married">기혼</option>
+                  <option value="separated">이혼/별거</option>
+                  <option value="complicated">복잡한 상황</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>현재 프로젝트</label>
+                <input className={inputClass} placeholder="예: SaaS 제품 런칭, 석사 논문, 유튜브 채널..." value={personalCtx.currentProject || ""} onChange={e => updateCtx("currentProject", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>재정 목표</label>
+                <input className={inputClass} placeholder="예: 6개월 내 흑자 전환..." value={personalCtx.financialGoal || ""} onChange={e => updateCtx("financialGoal", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>건강 이슈</label>
+                <input className={inputClass} placeholder="예: 수면 부족, 목 통증..." value={personalCtx.healthConcern || ""} onChange={e => updateCtx("healthConcern", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>학습 목표</label>
+                <input className={inputClass} placeholder="예: Python ML, 영어 회화..." value={personalCtx.learningGoal || ""} onChange={e => updateCtx("learningGoal", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>브랜딩 목표</label>
+                <input className={inputClass} placeholder="예: 분야 전문가로 인정받기..." value={personalCtx.brandingGoal || ""} onChange={e => updateCtx("brandingGoal", e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>현재 가장 큰 도전</label>
+                <input className={inputClass} placeholder="예: 번아웃, 팀 갈등, 자금 확보..." value={personalCtx.biggestChallenge || ""} onChange={e => updateCtx("biggestChallenge", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>운동 습관</label>
+                <input className={inputClass} placeholder="예: 주 3회 러닝, 헬스..." value={personalCtx.exerciseHabit || ""} onChange={e => updateCtx("exerciseHabit", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>재정 고민</label>
+                <input className={inputClass} placeholder="예: 대출 상환, 투자 판단..." value={personalCtx.financialConcern || ""} onChange={e => updateCtx("financialConcern", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>관계 초점</label>
+                <input className={inputClass} placeholder="예: 팀 리더십, 배우자와의 소통..." value={personalCtx.relationshipFocus || ""} onChange={e => updateCtx("relationshipFocus", e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>삶의 철학</label>
+                <input className={inputClass} placeholder="예: 꾸준함이 최고의 전략..." value={personalCtx.lifePhilosophy || ""} onChange={e => updateCtx("lifePhilosophy", e.target.value)} />
+              </div>
+            </div>
+            <Button onClick={handleSavePersonalCtx} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Save className="w-4 h-4" />
+              개인 맥락 저장
+            </Button>
+          </div>
 
           {/* Data Actions */}
           <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
