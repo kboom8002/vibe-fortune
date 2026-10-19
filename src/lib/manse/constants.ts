@@ -38,6 +38,8 @@ export const BRANCH_MAIN_ELEMENTS: Record<EarthlyBranch, "wood" | "fire" | "eart
   "亥": "water", "子": "water",
 };
 
+export const BRANCH_ELEMENTS = BRANCH_MAIN_ELEMENTS;
+
 export const BRANCH_POLARITIES: Record<EarthlyBranch, "yin" | "yang"> = {
   "子": "yin", // functionally yin (main stem 癸 is yin)
   "丑": "yin",

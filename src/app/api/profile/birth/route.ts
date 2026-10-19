@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { calculateChart, calculateMajorLuck } from "@/lib/manse";
+import { calculateChart, calculateMajorLuck, checkChartConsistency } from "@/lib/manse";
 import { BirthProfileRequestSchema, BirthProfileResponseSchema } from "@/schemas/api-contracts.schema";
 
 export async function POST(request: Request) {
@@ -46,12 +46,15 @@ export async function POST(request: Request) {
       policyName: "standard_kr" as const,
     };
 
-    // Calculate deterministic chart and major luck
+    // Calculate deterministic chart, consistency check, and major luck
     const chart = calculateChart({
       birthDateTime,
       timezone,
       gender: gender as any,
     });
+
+    const consistency = checkChartConsistency(chart, providedChart);
+    chart.chartConsistency = consistency;
 
     const majorLuck = calculateMajorLuck({
       chart,
@@ -137,6 +140,15 @@ export async function POST(request: Request) {
       userVisible: true,
     }));
 
+    if (consistency.status === "mismatched") {
+      warnings.push({
+        code: "CHART_CONSISTENCY_MISMATCH" as any,
+        message: consistency.note || "사용자 제공 명식과 계산된 명식이 일치하지 않습니다.",
+        node: "API_Profile_Birth",
+        userVisible: true,
+      });
+    }
+
     const responseData = {
       birthProfile: {
         id: birthProfileId,
@@ -152,6 +164,7 @@ export async function POST(request: Request) {
         updatedAt: birthProfileData.updated_at,
       },
       chart,
+      chartConsistency: consistency,
       majorLuck,
       warnings,
     };

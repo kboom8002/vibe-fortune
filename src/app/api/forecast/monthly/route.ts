@@ -90,32 +90,72 @@ export async function POST(request: Request) {
     const { targetMonth, currentFocus, userMessage, vibeCheckIn } = parsed.data;
     const personalContext = body.personalContext || undefined;
 
-    // 2. Build initial LangGraph Agent State
-    const birthProfile = body.birthProfile || {
-      id: "mock-birth-profile-id",
-      userId: "local-user",
-      name: "사용자",
-      birthDateTime: "1990-05-01T14:30:00+09:00",
-      timezone: "Asia/Seoul",
-      gender: "male" as const,
-      calculationPolicy: {
-        yearBoundary: "lichun" as const,
-        monthBoundary: "solar_terms" as const,
-        dayEpoch: "verified_jdn_epoch" as const,
-        hourPolicy: "standard_2h" as const,
-        nightZiPolicy: "disabled" as const,
-        trueSolarTime: false,
-        majorLuckDirectionRule: "gender_yinyang_year_stem" as const,
-        majorLuckStartRule: "days_to_jieqi_divide_by_3" as const,
-        policyName: "standard_kr" as const,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // 2. Resolve BirthProfile (request body -> Supabase DB -> demo fallback unless disabled)
+    let birthProfile = body.birthProfile;
+    if (!birthProfile && user?.id) {
+      try {
+        const { data: bpData } = await supabase
+          .from("birth_profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (bpData) {
+          birthProfile = {
+            id: bpData.id,
+            userId: bpData.user_id,
+            name: bpData.name || "사용자",
+            birthDateTime: bpData.birth_datetime_utc || "1990-05-01T14:30:00+09:00",
+            timezone: bpData.birth_timezone || "Asia/Seoul",
+            gender: bpData.gender || "male",
+            calculationPolicy: bpData.calculation_policy_json || {
+              yearBoundary: "lichun",
+              monthBoundary: "solar_terms",
+              dayEpoch: "verified_jdn_epoch",
+              hourPolicy: "standard_2h",
+              nightZiPolicy: "disabled",
+              trueSolarTime: false,
+              majorLuckDirectionRule: "gender_yinyang_year_stem",
+              majorLuckStartRule: "days_to_jieqi_divide_by_3",
+              policyName: "standard_kr",
+            },
+            createdAt: bpData.created_at,
+            updatedAt: bpData.updated_at || bpData.created_at,
+          };
+        }
+      } catch {
+        // Ignore DB lookup errors and fall back
+      }
+    }
+
+    if (!birthProfile && body.allowDemoFallback !== false) {
+      birthProfile = {
+        id: "mock-birth-profile-id",
+        userId,
+        name: "사용자",
+        birthDateTime: "1990-05-01T14:30:00+09:00",
+        timezone: "Asia/Seoul",
+        gender: "male" as const,
+        calculationPolicy: {
+          yearBoundary: "lichun" as const,
+          monthBoundary: "solar_terms" as const,
+          dayEpoch: "verified_jdn_epoch" as const,
+          hourPolicy: "standard_2h" as const,
+          nightZiPolicy: "disabled" as const,
+          trueSolarTime: false,
+          majorLuckDirectionRule: "gender_yinyang_year_stem" as const,
+          majorLuckStartRule: "days_to_jieqi_divide_by_3" as const,
+          policyName: "standard_kr" as const,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
 
     const parsedVibe = vibeCheckIn ? {
       id: crypto.randomUUID(),
-      userId: "local-user",
+      userId,
       valence: vibeCheckIn.valence ?? 5,
       arousal: vibeCheckIn.arousal ?? 5,
       energy: vibeCheckIn.energy ?? 5,
@@ -134,12 +174,14 @@ export async function POST(request: Request) {
         targetDate: targetMonth + "-01",
         vibeCheckIn: vibeCheckIn,
         currentFocus: currentFocus[0],
+        focusAxes: currentFocus,
         providedChart: body.providedChart,
-        timezone: "Asia/Seoul",
+        timezone: birthProfile?.timezone || "Asia/Seoul",
         userMessage: userMessage,
       },
       birthProfile,
       vibeCheckIn: parsedVibe,
+      recentRunReceipts: Array.isArray(body.recentRunReceipts) ? body.recentRunReceipts : undefined,
       personalContext,
       safetyFlags: [],
       warnings: [],
@@ -186,7 +228,7 @@ export async function POST(request: Request) {
         const dailyLuck = calculateDailyLuckRange({
           from: midpointDate,
           to: midpointDate,
-          timezone: "Asia/Seoul",
+          timezone: birthProfile?.timezone || "Asia/Seoul",
         });
 
         const stem = dailyLuck.days[0]?.pillar.stem as HeavenlyStem;
@@ -209,9 +251,55 @@ export async function POST(request: Request) {
       // If weekly breakdown calculation fails, return empty array (non-blocking)
     }
 
+    const oj = (finalState.finalOutput?.outputJson || {}) as Record<string, any>;
+    const evidenceTarget = oj.evidenceTarget || ["핵심 성과 지표(KPI) 및 실행 산출물 3건 문서화"];
+    const boundaryPolicy = oj.boundaryPolicy || (finalState.actionPolicy?.boundaryNotes || ["비핵심 요청 거절 및 에너지 경계선 유지"]);
+    const defaultActionCalendar = [
+      { week: "1주차", policyMode: "Consolidation", recommendedFocus: "범위 확정 및 우선순위 정렬", forbiddenFocus: "무계획 신규 확장" },
+      { week: "2주차", policyMode: "Consolidation", recommendedFocus: "핵심 산출물 집중 실행", forbiddenFocus: "범위 누수(Scope Leak)" },
+      { week: "3주차", policyMode: "Cleanup", recommendedFocus: "중간 점검 및 리스크 완화", forbiddenFocus: "과도한 약속 추가" },
+      { week: "4주차", policyMode: "Recovery", recommendedFocus: "마감 정리 및 다음 달 회복 버퍼 확보", forbiddenFocus: "야간 충동적 의사결정" },
+    ];
+    const actionCalendar = Array.isArray(oj.monthlyActionCalendar) ? oj.monthlyActionCalendar : defaultActionCalendar;
+
+    const monthlyPlan = {
+      month: targetMonth,
+      oneLineConclusion: oj.oneLineConclusion || oj.summary || "",
+      monthlyConceptPortfolio: oj.monthlyConceptPortfolio || (finalState.conceptState?.activeConcepts || []),
+      monthlyRiskPortfolio: oj.monthlyRiskPortfolio || [
+        finalState.riskVector?.primaryRisk || "scopeCreepRisk",
+        finalState.riskVector?.secondaryRisk || "fatigueRisk",
+      ],
+      evidenceTarget,
+      boundaryPolicy,
+      revenuePolicy: oj.revenuePolicy || ["기존 수익원 안정화 및 핵심 전환 지표 관리"],
+      relationshipPolicy: oj.relationshipPolicy || ["핵심 이해관계자 중심 소통 및 감정 소모 최소화"],
+      recoveryPolicy: oj.recoveryPolicy || ["주간 단위 에너지 회복 버퍼 확보"],
+      actionCalendar,
+      monthlyActionCalendar: actionCalendar,
+    };
+
+    const outputJson = finalState.finalOutput?.outputJson
+      ? {
+          ...finalState.finalOutput.outputJson,
+          ...monthlyPlan,
+        }
+      : undefined;
+
+    const forecastOutput = finalState.finalOutput
+      ? {
+          ...monthlyPlan,
+          ...finalState.finalOutput,
+          outputJson: outputJson || finalState.finalOutput.outputJson,
+          evidenceTarget,
+          boundaryPolicy,
+        }
+      : undefined;
+
     return NextResponse.json({
       status,
-      forecastOutput: finalState.finalOutput,
+      forecastOutput,
+      monthlyPlan,
       richOutput: finalState.richOutput || {},
       estimatedVibe: finalState.estimatedVibe,
       weeklyBreakdown,

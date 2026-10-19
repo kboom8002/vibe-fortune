@@ -57,10 +57,11 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
     severity: "critical",
     action: "blocked",
     patterns: [
-      /자해/,
+      /(?<![투출부유소비글한])자해(?!결|석|명)/,
       /자살/,
       /죽고\s*싶/,
       /목숨/,
+      /살고\s*싶지\s*않/,
       /suicide/i,
       /self[\s-]*harm/i,
       /kill\s*my\s*self/i,
@@ -78,6 +79,8 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
       /수술\s*해야/,
       /약\s*처방/,
       /진단\s*해/,
+      /병에\s*걸릴지/,
+      /뇌종양/,
       /medical\s*advice/i,
       /prescri(?:be|ption)/i,
       /diagnos(?:e|is)/i,
@@ -90,11 +93,13 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
     severity: "medium",
     action: "boundary_added",
     patterns: [
-      /주식\s*추천/,
+      /주식\s*(?:추천|풀매수|매수|투자)/,
       /투자\s*보장/,
       /돈\s*보장/,
       /수익\s*보장/,
-      /코인\s*추천/,
+      /코인\s*(?:추천|레버리지|풀매수|투자)/,
+      /풀매수/,
+      /투자.*(?:반드시|확정|수익)/,
       /investment\s*guarantee/i,
       /guaranteed\s*return/i,
       /stock\s*pick/i,
@@ -119,12 +124,17 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
   {
     type: "relationship_manipulation",
     severity: "high",
-    action: "boundary_added",
+    action: "blocked",
     patterns: [
       /상대방.*조종/,
+      /상대.*조종/,
       /마음.*사로잡/,
       /상대.*굴복/,
+      /집착하게\s*만드/,
+      /가스라이팅/,
+      /질투.*유발/,
       /manipulat(?:e|ion)/i,
+      /gaslight/i,
       /seduc(?:e|tion)\s*strateg/i,
       /control\s*(?:him|her|them|partner)/i,
     ],
@@ -137,8 +147,9 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
     action: "boundary_added",
     patterns: [
       /정확히\s*맞/,
-      /반드시\s*일어/,
+      /반드시\s*(?:일어|당첨|성공|사고)/,
       /100\s*%\s*확실/,
+      /확정(?:해줘|적으로)/,
       /운명적으로/,
       /definitely\s*will\s*happen/i,
       /guaranteed\s*to\s*(?:be|happen|occur)/i,
@@ -150,21 +161,21 @@ const INPUT_SAFETY_PATTERNS: InputPattern[] = [
 
 // ─── Output Safety Patterns ─────────────────────────────────────────────────
 
-interface OutputPattern {
+export interface OutputPattern {
   type: SafetyFlagType;
   severity: SafetySeverity;
   patterns: RegExp[];
   message: string;
-  replacement?: string;
+  replacement: string;
 }
 
-const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
+export const FORBIDDEN_OUTPUT_PATTERNS: OutputPattern[] = [
   {
     type: "deterministic_prediction",
     severity: "high",
     patterns: [
-      /반드시.*(?:일어|발생|실현)/,
-      /확실히.*(?:될|할)\s*것/,
+      /반드시.*(?:일어|발생|실현|성공|당첨|납니다)/,
+      /확실히.*(?:될|할|이루어질)\s*것/,
       /틀림없이/,
       /100%/,
       /운명적으로\s*(?:결정|정해)/,
@@ -180,7 +191,7 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
     type: "fear_amplification",
     severity: "high",
     patterns: [
-      /큰\s*(?:재앙|재난|불행).*(?:닥칠|올)/,
+      /큰\s*(?:재앙|재난|불행|사고).*(?:닥칠|올|납니다)/,
       /파멸/,
       /모든\s*것.*(?:잃|망)/,
       /극심한\s*(?:고통|불행)/,
@@ -202,6 +213,7 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
       /you\s+(?:must|should)\s+(?:take|stop)\s+(?:medication|medicine)/i,
     ],
     message: "의학적 최종 판단이 감지되었습니다.",
+    replacement: "[전문의 상담 권장 안내로 대체됨]",
   },
   {
     type: "legal",
@@ -212,6 +224,7 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
       /you\s+(?:must|should)\s+(?:sue|file\s+a\s+lawsuit)/i,
     ],
     message: "법적 최종 판단이 감지되었습니다.",
+    replacement: "[법률 전문가 자문 권장 안내로 대체됨]",
   },
   {
     type: "investment",
@@ -224,6 +237,7 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
       /guaranteed\s+(?:profit|return)/i,
     ],
     message: "투자 최종 판단이 감지되었습니다.",
+    replacement: "[전문 재무 상담 권장 안내로 대체됨]",
   },
   {
     type: "relationship_manipulation",
@@ -234,6 +248,7 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
       /manipulat(?:e|ion)\s+(?:your|their|partner)/i,
     ],
     message: "관계 조작 표현이 감지되었습니다.",
+    replacement: "[상대방 자율성 존중 표현으로 대체됨]",
   },
   {
     type: "overclaim",
@@ -242,12 +257,17 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
       /완벽하게\s*맞/,
       /과학적으로\s*(?:증명|입증)/,
       /절대적\s*진실/,
+      /성과.*보장/,
+      /보장됩니다/,
       /scientifically\s+proven/i,
       /absolute\s+truth/i,
     ],
     message: "과도한 주장(overclaim) 표현이 감지되었습니다.",
+    replacement: "[과장 없는 객관적 표현으로 대체됨]",
   },
 ];
+
+const OUTPUT_SAFETY_PATTERNS = FORBIDDEN_OUTPUT_PATTERNS;
 
 // ─── Input Safety Gate ───────────────────────────────────────────────────────
 
@@ -256,10 +276,10 @@ const OUTPUT_SAFETY_PATTERNS: OutputPattern[] = [
  * 
  * Detects:
  * - Self-harm / suicide content (critical → blocked)
+ * - Relationship manipulation requests (high → blocked)
  * - Medical advice requests (medium → boundary_added)
  * - Investment guarantee requests (medium → boundary_added)
  * - Legal advice requests (medium → boundary_added)
- * - Relationship manipulation requests (high → boundary_added)
  * - Deterministic prediction requests (medium → boundary_added)
  */
 export function checkInputSafety(input: string): SafetyCheckResult {
@@ -318,22 +338,24 @@ export function checkOutputSafety(output: string): SafetyCheckResult {
   let needsSanitization = false;
 
   for (const pattern of OUTPUT_SAFETY_PATTERNS) {
+    let matchedInCategory = false;
     for (const regex of pattern.patterns) {
       if (regex.test(output)) {
-        flags.push({
-          type: pattern.type,
-          severity: pattern.severity,
-          action: "boundary_added",
-          message: pattern.message,
-        });
+        if (!matchedInCategory) {
+          flags.push({
+            type: pattern.type,
+            severity: pattern.severity,
+            action: "boundary_added",
+            message: pattern.message,
+          });
+          matchedInCategory = true;
+        }
 
         // Apply replacement if defined
         if (pattern.replacement) {
           sanitized = sanitized.replace(regex, pattern.replacement);
           needsSanitization = true;
         }
-
-        break; // Only flag once per pattern category
       }
     }
   }
@@ -357,12 +379,12 @@ export function checkOutputSafety(output: string): SafetyCheckResult {
     });
   }
 
-  const hasHighSeverity = flags.some(
-    (f) => f.severity === "high" || f.severity === "critical"
+  const hasForbiddenViolation = flags.some(
+    (f) => f.type !== "missing_boundary" && (f.severity === "high" || f.severity === "critical" || f.severity === "medium")
   );
 
   return {
-    safe: !hasHighSeverity,
+    safe: !hasForbiddenViolation,
     flags,
     sanitizedOutput: needsSanitization ? sanitized : undefined,
   };

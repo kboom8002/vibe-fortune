@@ -57,12 +57,8 @@ export default function SignUpPage() {
           name,
         }));
 
-        // Set auth cookie so server middleware can detect authenticated state
-        const tokenData = JSON.stringify({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        document.cookie = `sb-auth-token=${btoa(tokenData)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+        // Set non-conflicting auth flag cookie while letting @supabase/ssr manage sb-* cookies
+        document.cookie = `vibe-auth-flag=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
         window.location.href = "/app/onboarding";
       }

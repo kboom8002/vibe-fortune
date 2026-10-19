@@ -1,6 +1,6 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-let clientInstance: ReturnType<typeof createSupabaseClient> | null = null;
+let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
 
 export function createClient() {
   if (clientInstance) return clientInstance;
@@ -8,17 +8,7 @@ export function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  clientInstance = createSupabaseClient(url, key, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-      // Use localStorage for session persistence on client
-      storage: typeof window !== "undefined" ? window.localStorage : undefined,
-      storageKey: "sb-auth-token",
-      flowType: "implicit",
-    },
-  });
+  clientInstance = createBrowserClient(url, key);
 
   return clientInstance;
 }

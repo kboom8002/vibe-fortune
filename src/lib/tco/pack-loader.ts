@@ -16,11 +16,28 @@ export interface OperatorRule {
   id?: string;
   operator_id: string;
   name: string;
+  operator?: string;
   trigger: {
     domain?: string[];
-    vibe?: Record<string, string>;
+    domains?: string[];
+    vibe?: Record<string, string | number>;
+    vibe_conditions?: {
+      arousal_min?: number;
+      arousal_max?: number;
+      energy_min?: number;
+      energy_max?: number;
+      valence_min?: number;
+      valence_max?: number;
+      focus_min?: number;
+      focus_max?: number;
+      social_load_min?: number;
+      social_load_max?: number;
+      [key: string]: unknown;
+    };
     elements?: string[];
+    active_concepts?: string[];
     risk?: string[];
+    risk_thresholds?: Record<string, number>;
   };
   output_policy: {
     mode: "Expansion" | "Consolidation" | "Cleanup" | "Recovery";
@@ -30,8 +47,110 @@ export interface OperatorRule {
     deferredActions: string[];
     boundaryNotes: string[];
   };
+  output?: {
+    policy_mode?: string;
+    warmth_vs_competence?: string;
+    max_major_actions?: number;
+    required_actions?: string[];
+    forbidden_actions?: string[];
+    deferred_actions?: string[];
+    boundary_notes?: string[];
+    delay_hours?: number;
+    rationale_template?: string;
+    [key: string]: unknown;
+  };
   priority: number;
   enabled: boolean;
+}
+
+const POLICY_MODE_NORMALIZATION: Record<string, "Expansion" | "Consolidation" | "Cleanup" | "Recovery"> = {
+  Expansion: "Expansion",
+  Expand: "Expansion",
+  Consolidation: "Consolidation",
+  Consolidate: "Consolidation",
+  Cleanup: "Cleanup",
+  BoundaryLock: "Cleanup",
+  ReduceScope: "Cleanup",
+  Recovery: "Recovery",
+  Safety: "Recovery",
+  DelayCommit: "Recovery",
+};
+
+function normalizeOperatorRule(r: any): OperatorRule {
+  const operatorId = r.operator_id || r.id || "op.unknown";
+  const name = r.name || r.operator || operatorId;
+  const priority = r.priority ?? 50;
+  const enabled = r.enabled !== undefined ? Boolean(r.enabled) : true;
+  const rawTrigger = r.trigger || {};
+  const rawOutputPolicy = r.output_policy || {};
+  const rawOutput = r.output || {};
+
+  const rawMode = rawOutputPolicy.mode || rawOutput.policy_mode || "Consolidation";
+  const mode = POLICY_MODE_NORMALIZATION[rawMode] || "Consolidation";
+  const warmthVsCompetence =
+    rawOutputPolicy.warmthVsCompetence ||
+    rawOutputPolicy.warmth_vs_competence ||
+    rawOutput.warmthVsCompetence ||
+    rawOutput.warmth_vs_competence ||
+    "Balanced";
+  const requiredActions =
+    rawOutputPolicy.requiredActions ||
+    rawOutputPolicy.required_actions ||
+    rawOutput.required_actions ||
+    rawOutput.requiredActions ||
+    [];
+  const forbiddenActions =
+    rawOutputPolicy.forbiddenActions ||
+    rawOutputPolicy.forbidden_actions ||
+    rawOutput.forbidden_actions ||
+    rawOutput.forbiddenActions ||
+    [];
+  const deferredActions =
+    rawOutputPolicy.deferredActions ||
+    rawOutputPolicy.deferred_actions ||
+    rawOutput.deferred_actions ||
+    rawOutput.deferredActions ||
+    [];
+  const boundaryNotes =
+    rawOutputPolicy.boundaryNotes ||
+    rawOutputPolicy.boundary_notes ||
+    rawOutput.boundary_notes ||
+    rawOutput.boundaryNotes ||
+    (rawOutput.rationale_template ? [rawOutput.rationale_template] : []);
+
+  return {
+    id: r.id || operatorId,
+    operator_id: operatorId,
+    name,
+    operator: r.operator || name,
+    priority,
+    enabled,
+    trigger: {
+      ...rawTrigger,
+      domain: rawTrigger.domain || rawTrigger.domains,
+      domains: rawTrigger.domains || rawTrigger.domain,
+    },
+    output_policy: {
+      mode,
+      warmthVsCompetence,
+      requiredActions,
+      forbiddenActions,
+      deferredActions,
+      boundaryNotes,
+    },
+    output: {
+      policy_mode: rawOutput.policy_mode || rawMode,
+      warmth_vs_competence: warmthVsCompetence,
+      max_major_actions: rawOutput.max_major_actions,
+      required_actions: requiredActions,
+      forbidden_actions: forbiddenActions,
+      deferred_actions: deferredActions,
+      boundary_notes: boundaryNotes,
+      delay_hours: rawOutput.delay_hours,
+      rationale_template: rawOutput.rationale_template,
+      ...rawOutput,
+    },
+  };
 }
 
 export class TcoPackLoader {
@@ -47,7 +166,7 @@ export class TcoPackLoader {
     try {
       const files = fs.readdirSync(this.packsDir);
       for (const file of files) {
-        if (file.endsWith("_pack.yaml")) {
+        if (file.endsWith("_pack.yaml") || file.endsWith("_concepts.yaml")) {
           const filepath = path.join(this.packsDir, file);
           const filecontent = fs.readFileSync(filepath, "utf8");
           const data = yaml.load(filecontent) as any;
@@ -63,7 +182,7 @@ export class TcoPackLoader {
   }
 
   loadOperatorRules(): OperatorRule[] {
-    const rules: OperatorRule[] = [];
+    const rawRules: any[] = [];
     try {
       // First, load from operator_rules.yaml
       const filepath = path.join(this.packsDir, "operator_rules.yaml");
@@ -71,9 +190,9 @@ export class TcoPackLoader {
         const filecontent = fs.readFileSync(filepath, "utf8");
         const data = yaml.load(filecontent) as any;
         if (data && Array.isArray(data.rules)) {
-          rules.push(...data.rules);
+          rawRules.push(...data.rules);
         } else if (data && Array.isArray(data.operators)) {
-          rules.push(...data.operators);
+          rawRules.push(...data.operators);
         }
       }
 
@@ -85,7 +204,7 @@ export class TcoPackLoader {
           const filecontent = fs.readFileSync(packpath, "utf8");
           const data = yaml.load(filecontent) as any;
           if (data && Array.isArray(data.operators)) {
-            rules.push(...data.operators);
+            rawRules.push(...data.operators);
           }
         }
       }
@@ -93,9 +212,14 @@ export class TcoPackLoader {
       console.error("[TcoPackLoader] Failed to load operator rules:", err);
     }
 
-    // De-duplicate and sort by priority
-    return rules
-      .filter((r, idx, self) => self.findIndex(x => x.operator_id === r.operator_id) === idx)
+    const normalized = rawRules.map(normalizeOperatorRule);
+
+    // De-duplicate by (operator_id || id) and sort by priority descending
+    return normalized
+      .filter(
+        (r, idx, self) =>
+          self.findIndex(x => (x.operator_id || x.id) === (r.operator_id || r.id)) === idx
+      )
       .sort((a, b) => b.priority - a.priority);
   }
 
@@ -146,10 +270,14 @@ export class TcoPackLoader {
         sections.push(`### ${op.name} (우선도: ${op.priority})`);
         if (op.trigger) {
           const triggerParts: string[] = [];
-          if (op.trigger.domain?.length) triggerParts.push(`도메인: ${op.trigger.domain.join(", ")}`);
+          const domains = op.trigger.domains || op.trigger.domain;
+          if (domains?.length) triggerParts.push(`도메인: ${domains.join(", ")}`);
           if (op.trigger.elements?.length) triggerParts.push(`원소: ${op.trigger.elements.join(", ")}`);
+          if (op.trigger.active_concepts?.length) triggerParts.push(`개념: ${op.trigger.active_concepts.join(", ")}`);
           if (op.trigger.risk?.length) triggerParts.push(`리스크: ${op.trigger.risk.join(", ")}`);
-          if (op.trigger.vibe) triggerParts.push(`바이브 조건: ${JSON.stringify(op.trigger.vibe)}`);
+          if (op.trigger.risk_thresholds) triggerParts.push(`리스크 임계값: ${JSON.stringify(op.trigger.risk_thresholds)}`);
+          if (op.trigger.vibe_conditions) triggerParts.push(`바이브 조건: ${JSON.stringify(op.trigger.vibe_conditions)}`);
+          else if (op.trigger.vibe) triggerParts.push(`바이브 조건: ${JSON.stringify(op.trigger.vibe)}`);
           if (triggerParts.length) sections.push(`  트리거: ${triggerParts.join(" | ")}`);
         }
         if (op.output_policy) {
@@ -174,4 +302,23 @@ export class TcoPackLoader {
 }
 
 export const tcoPackLoader = new TcoPackLoader();
+
+export function loadTcoPacks() {
+  const concepts = tcoPackLoader.loadConcepts();
+  const operatorRules = tcoPackLoader.loadOperatorRules();
+  const manseConcepts = concepts.filter(
+    c => c.id.startsWith("element.") || (!c.id.startsWith("vibe.") && c.type === "state")
+  );
+  const vibeConcepts = concepts.filter(c => c.id.startsWith("vibe."));
+  const actionConcepts = concepts.filter(
+    c => c.type === "action" || c.type === "evidence" || c.type === "risk"
+  );
+  return {
+    concepts,
+    operatorRules,
+    manseConcepts,
+    vibeConcepts,
+    actionConcepts,
+  };
+}
 

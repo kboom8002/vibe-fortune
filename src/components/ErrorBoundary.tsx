@@ -15,15 +15,27 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, errorInfo);
+  }
+
   render() {
     if (this.state.hasError) {
       return (
         <div className="p-8 rounded-3xl bg-zinc-900/30 border border-red-900/30 backdrop-blur-md text-center space-y-4">
           <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
           <h3 className="text-lg font-semibold text-zinc-200">일시적 오류가 발생했습니다</h3>
-          <p className="text-sm text-zinc-400">{this.props.fallbackMessage || '페이지를 새로고침하거나 나중에 다시 시도해주세요.'}</p>
+          <p className="text-sm text-zinc-400">
+            {this.props.fallbackMessage || this.state.error?.message || '페이지를 새로고침하거나 나중에 다시 시도해주세요.'}
+          </p>
           <div className="flex items-center justify-center gap-3">
-            <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-xl bg-zinc-800/60 hover:bg-zinc-700/60 text-sm text-zinc-300 flex items-center gap-2 transition-colors">
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: undefined });
+                window.location.reload();
+              }}
+              className="px-4 py-2 rounded-xl bg-zinc-800/60 hover:bg-zinc-700/60 text-sm text-zinc-300 flex items-center gap-2 transition-colors"
+            >
               <RefreshCw className="w-4 h-4" />
               새로고침
             </button>
@@ -38,3 +50,6 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;
+

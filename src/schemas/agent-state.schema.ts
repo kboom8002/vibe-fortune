@@ -33,6 +33,7 @@ export const AgentWarningSchema = z.object({
   code: z.enum([
     "BIRTH_TIME_UNKNOWN",
     "TIMEZONE_UNCERTAIN",
+    "GENDER_UNSPECIFIED",
     "CHART_CONSISTENCY_MISMATCH",
     "SOLAR_TERM_APPROXIMATED",
     "TRUE_SOLAR_TIME_DISABLED",
@@ -41,6 +42,7 @@ export const AgentWarningSchema = z.object({
     "INSUFFICIENT_CONTEXT",
     "POLICY_VARIANT_MAY_DIFFER",
     "SAFETY_BOUNDARY_ADDED",
+    "CALCULATION_FAILED",
   ]),
   message: z.string(),
   node: z.string(),
@@ -70,6 +72,7 @@ export const ForecastRequestInputSchema = z.object({
   targetDate: z.string().optional(), // For daily/weekly/monthly context
   vibeCheckIn: z.lazy(() => VibeCheckInSchema.partial()).optional(),
   currentFocus: ForecastFocusSchema.optional(),
+  focusAxes: z.array(ForecastFocusSchema).optional(),
   timezone: z.string().default("Asia/Seoul"),
   providedChart: ProvidedChartSchema.optional(),
   userMessage: z.string().optional(),

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateChart, calculateMajorLuck, calculateAnnualLuck } from "@/lib/manse";
 import type { ChartResult } from "@/lib/manse/types";
 import { loadPrompt, getPromptVersions } from "@/lib/prompt-registry";
+import { checkInputSafety, checkOutputSafety } from "@/lib/safety";
 
 // ---------------------------------------------------------------------------
 // Element type & mappings (deterministic — no LLM)
@@ -277,8 +278,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Extract optional personalContext
+    // Extract optional personalContext and check input safety (AGENTS.md §8)
     const personalContext: string | undefined = body.personalContext;
+    const inputText = [
+      typeof personalContext === "string" ? personalContext : JSON.stringify(personalContext || ""),
+      body.userMessage,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const inputSafety = checkInputSafety(inputText);
+    if (!inputSafety.safe) {
+      return NextResponse.json({
+        status: "blocked",
+        message:
+          inputSafety.flags[0]?.message ||
+          "안전 경계 정책에 의해 요청이 차단되었습니다. 전문 상담기관(자살예방상담전화 1393)에 연락하시기 바랍니다.",
+        safetyFlags: inputSafety.flags,
+      });
+    }
 
     // Calculate chart deterministically
     let chartResult: ChartResult;
@@ -390,6 +407,8 @@ export async function POST(request: Request) {
       dayMaster: chartResult.dayMaster,
     };
 
+    const safetyFlags = [...inputSafety.flags];
+
     // --- LLM Enhancement (optional, enriches deterministic baseline) ---
     const apiKey = process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY;
     if (apiKey) {
@@ -440,14 +459,16 @@ export async function POST(request: Request) {
             ]);
             const llmText = typeof response.content === "string" ? response.content : "";
             if (llmText.length > 200) {
-              lifetimeFortune.llmEnhancedNarrative = llmText;
+              const outputSafety = checkOutputSafety(llmText);
+              safetyFlags.push(...outputSafety.flags);
+              lifetimeFortune.llmEnhancedNarrative = outputSafety.sanitizedOutput ?? llmText;
             }
           } else {
             const { ChatOpenAI } = await import("@langchain/openai");
             const { SystemMessage, HumanMessage } = await import("@langchain/core/messages");
             const llm = new ChatOpenAI({
               openAIApiKey: process.env.OPENAI_API_KEY!,
-              modelName: process.env.OPENAI_MODEL || "gpt-4o-mini",
+              modelName: process.env.OPENAI_MODEL || "gpt-6-luna",
               temperature: 0.3,
             });
             const response = await llm.invoke([
@@ -456,7 +477,9 @@ export async function POST(request: Request) {
             ]);
             const llmText = typeof response.content === "string" ? response.content : "";
             if (llmText.length > 200) {
-              lifetimeFortune.llmEnhancedNarrative = llmText;
+              const outputSafety = checkOutputSafety(llmText);
+              safetyFlags.push(...outputSafety.flags);
+              lifetimeFortune.llmEnhancedNarrative = outputSafety.sanitizedOutput ?? llmText;
             }
           }
         }
@@ -469,6 +492,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       status: "ok",
       lifetimeFortune,
+      safetyFlags,
       promptVersions: getPromptVersions(),
     });
   } catch (err) {

@@ -3,7 +3,9 @@ version: "0.2"
 description: "TCO-Vibe Action Policy generation operator rules"
 operators:
   - id: op.fire_overheat_scope_lock
+    operator_id: op.fire_overheat_scope_lock
     name: Fire Overheat Scope Lock
+    operator: ReduceScope
     trigger:
       active_concepts: [element.fire.expression]
       risk_thresholds:
@@ -22,13 +24,17 @@ operators:
         - 새 기능 착수
         - 밤 10시 이후 제안서 발송
         - 무제한 커스터마이징 약속
+      deferredActions:
+        - 신규 확장 캠페인 기획
       boundaryNotes:
         - 성과를 보장하지 말고 실행 범위와 조건을 명시한다.
     priority: 90
     enabled: true
 
   - id: op.low_energy_recovery_guard
+    operator_id: op.low_energy_recovery_guard
     name: Low Energy Recovery Guard
+    operator: DelayCommit
     trigger:
       risk_thresholds:
         burnout: 0.6
@@ -46,13 +52,17 @@ operators:
         - 새 프로젝트 착수
         - 장문 메시지 발송
         - 가격 양보 결정
+      deferredActions:
+        - 장기 계약 및 대규모 의사결정
       boundaryNotes:
         - 회복이 부족할 때 확장 행동을 미룬다.
     priority: 100
     enabled: true
 
   - id: op.relationship_warmth_boundary
+    operator_id: op.relationship_warmth_boundary
     name: Relationship Warmth Boundary
+    operator: Consolidate
     trigger:
       domains: [relationship_love]
       risk_thresholds:
@@ -68,6 +78,8 @@ operators:
         - 관계를 프로젝트처럼 설명
         - 상대를 설득하려는 장문 메시지
         - 질투나 불안을 자극하는 행동
+      deferredActions:
+        - 관계 정의를 요구하는 진지한 담판
       boundaryNotes:
         - 상대방의 자율성과 거절 가능성을 존중한다.
     priority: 95

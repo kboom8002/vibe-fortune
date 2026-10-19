@@ -2,6 +2,7 @@ prompts:
   - prompt_id: system
     version: 0.2.0
     file: prompts/system.md
+    purpose: global_instruction
     model_role: global_instruction
     input_schema: none
     output_schema: none
@@ -10,6 +11,8 @@ prompts:
   - prompt_id: concept_canonicalizer
     version: 0.2.0
     file: prompts/concept_canonicalizer.md
+    purpose: forecast
+    model_role: concept_mapper
     input_schema: ContextTensorSchema
     output_schema: ConceptStateSchema
     safety_class: S1
@@ -18,6 +21,8 @@ prompts:
   - prompt_id: risk_vectorizer
     version: 0.2.0
     file: prompts/risk_vectorizer.md
+    purpose: forecast
+    model_role: risk_refiner
     input_schema: RiskVectorizerInputSchema
     output_schema: RiskVectorSchema
     safety_class: S1
@@ -26,6 +31,8 @@ prompts:
   - prompt_id: policy_binder
     version: 0.2.0
     file: prompts/policy_binder.md
+    purpose: forecast
+    model_role: policy_generator
     input_schema: PolicyBinderInputSchema
     output_schema: ActionPolicySchema
     safety_class: S1
@@ -34,6 +41,8 @@ prompts:
   - prompt_id: forecast_writer
     version: 0.2.0
     file: prompts/forecast_writer.md
+    purpose: forecast
+    model_role: structured_renderer
     input_schema: ForecastWriterInputSchema
     output_schema: ForecastOutputSchema
     safety_class: S1
@@ -42,6 +51,8 @@ prompts:
   - prompt_id: safety_reviewer
     version: 0.2.0
     file: prompts/safety_reviewer.md
+    purpose: safety
+    model_role: safety_gate
     input_schema: SafetyReviewInputSchema
     output_schema: SafetyReviewOutputSchema
     safety_class: S3
@@ -50,8 +61,38 @@ prompts:
   - prompt_id: run_receipt_summarizer
     version: 0.2.0
     file: prompts/run_receipt_summarizer.md
+    purpose: forecast
+    model_role: posterior_recomposer
     input_schema: RecompositionInputSchema
     output_schema: RecompositionSummarySchema
     safety_class: S1
     golden_tests: [RR-001, RR-002]
+    status: active
+  - prompt_id: eval_judge
+    version: 0.2.0
+    file: prompts/eval_judge.md
+    purpose: safety
+    model_role: eval_judge
+    input_schema: EvalJudgeInputSchema
+    output_schema: EvalJudgeRubricSchema
+    safety_class: S1
+    golden_tests: [QBS-D-001, QBS-D-002, QBS-W-001]
+    status: active
+  - prompt_id: vibe_rewriter
+    version: 0.2.0
+    file: prompts/vibe_rewriter.md
+    purpose: rewrite
+    model_role: tone_adapter
+    input_schema: VibeRewriterInputSchema
+    output_schema: VibeRewriterOutputSchema
+    safety_class: S1
+    status: active
+  - prompt_id: vibe_estimator
+    version: 0.2.0
+    file: prompts/vibe_estimator.md
+    purpose: forecast
+    model_role: state_estimator
+    input_schema: VibeEstimatorInputSchema
+    output_schema: VibeCheckInSchema
+    safety_class: S1
     status: active

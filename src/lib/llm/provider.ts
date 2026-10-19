@@ -184,11 +184,11 @@ export class LLMProviderAdapter implements LLMProvider {
 
   constructor() {
     this.defaultProvider = (process.env.LLM_PROVIDER as ProviderKey) || "mock";
-    this.defaultModel = process.env.OPENAI_MODEL || "gpt-5.5";
+    this.defaultModel = process.env.OPENAI_MODEL || "gpt-6-luna";
 
     // Collect API keys
     this.openaiKey = process.env.OPENAI_API_KEY;
-    this.googleKey = process.env.GOOGLE_API_KEY;
+    this.googleKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     this.anthropicKey = process.env.ANTHROPIC_API_KEY;
 
     // Validate default provider has a key

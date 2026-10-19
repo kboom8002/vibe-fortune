@@ -87,15 +87,31 @@ export default function MonthlyPage() {
         const month = new Date().toISOString().substring(0, 7);
 
         let personalContext: any = undefined;
+        let birthProfile: any = undefined;
+        let recentRunReceipts: any[] | undefined = undefined;
         try {
           const storedCtx = localStorage.getItem("personal-context");
           if (storedCtx) personalContext = JSON.parse(storedCtx);
+        } catch { /* ignore */ }
+        try {
+          const storedProfile = localStorage.getItem("user-birth-profile");
+          if (storedProfile) birthProfile = JSON.parse(storedProfile);
+        } catch { /* ignore */ }
+        try {
+          const storedReceipts = localStorage.getItem("user-run-receipts") || localStorage.getItem("run-receipts");
+          if (storedReceipts) recentRunReceipts = JSON.parse(storedReceipts);
         } catch { /* ignore */ }
 
         const res = await fetch("/api/forecast/monthly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetMonth: month, currentFocus: ["business_finance"], personalContext }),
+          body: JSON.stringify({
+            targetMonth: month,
+            currentFocus: ["business_finance"],
+            birthProfile,
+            personalContext,
+            recentRunReceipts,
+          }),
         });
 
         if (res.ok) {
@@ -107,34 +123,80 @@ export default function MonthlyPage() {
             generateLocalWeeklyBreakdown();
           }
 
-          if (apiData.forecastOutput) {
-            const fo = apiData.forecastOutput;
+          const fo = apiData.forecastOutput;
+          const mp = apiData.monthlyPlan || (fo && (fo.outputJson || fo)) || null;
+          if (mp || fo) {
+            const src = { ...(fo || {}), ...((fo && fo.outputJson) || {}), ...(apiData.monthlyPlan || {}) };
+            const conceptPort = Array.isArray(src.monthlyConceptPortfolio) && src.monthlyConceptPortfolio.length > 0
+              ? src.monthlyConceptPortfolio.map((c: any, i: number) =>
+                  typeof c === "string"
+                    ? {
+                        name: c.split("(")[0]?.trim() || c,
+                        weight: i === 0 ? 0.4 : 0.3,
+                        state: c.toLowerCase().includes("consolidation")
+                          ? "consolidation"
+                          : c.toLowerCase().includes("expansion")
+                            ? "expansion"
+                            : "cleanup",
+                      }
+                    : c
+                )
+              : [
+                  { name: "재정비", weight: 0.4, state: "cleanup" },
+                  { name: "학습·축적", weight: 0.3, state: "expansion" },
+                  { name: "관계 조율", weight: 0.3, state: "consolidation" },
+                ];
+
+            const riskPort = Array.isArray(src.monthlyRiskPortfolio) && src.monthlyRiskPortfolio.length > 0
+              ? src.monthlyRiskPortfolio.map((r: any) =>
+                  typeof r === "string"
+                    ? { domain: r.split(" ")[0] || "일반", level: "medium", note: r }
+                    : r
+                )
+              : [
+                  { domain: "재무", level: "medium", note: "불필요한 고정 지출 모니터링 필요" },
+                  { domain: "건강", level: "low", note: "수면·회복 루틴 안정적 유지" },
+                  { domain: "관계", level: "medium", note: "핵심 파트너십 경계선 재정립" },
+                ];
+
             const mapped = {
-              conclusion: fo.oneLineConclusion || fo.conclusion || "",
-              conceptPortfolio: (fo.monthlyConceptPortfolio || []).map((c: string, i: number) => ({
-                name: c.split("(")[0]?.trim() || c,
-                weight: i === 0 ? 0.4 : 0.3,
-                state: c.toLowerCase().includes("consolidation") ? "consolidation" : c.toLowerCase().includes("expansion") ? "expansion" : "cleanup",
-              })),
-              riskPortfolio: (fo.monthlyRiskPortfolio || []).map((r: string) => ({
-                domain: r.split(" ")[0] || "일반",
-                level: "medium",
-                note: r,
-              })),
+              conclusion: src.oneLineConclusion || src.conclusion || src.summary || fo?.outputMarkdown?.substring(0, 200) || "",
+              conceptPortfolio: conceptPort,
+              riskPortfolio: riskPort,
+              evidenceTarget: Array.isArray(src.evidenceTarget) && src.evidenceTarget.length > 0
+                ? src.evidenceTarget
+                : ["핵심 프로젝트 지표 2건 데이터화", "고객/파트너 피드백 5건 이상 문서화"],
+              boundaryPolicy: Array.isArray(src.boundaryPolicy) && src.boundaryPolicy.length > 0
+                ? src.boundaryPolicy
+                : ["검증되지 않은 신규 확장 요청 24시간 보류", "주 2회 이상 야간 업무 금지 및 회복 시간 확보"],
               threePillars: {
-                revenue: { score: 65, advice: (fo.revenuePolicy || [])[0] || "기존 매출원 최적화" },
-                relationship: { score: 55, advice: (fo.relationshipPolicy || [])[0] || "핵심 관계에 집중" },
-                recovery: { score: 75, advice: (fo.recoveryPolicy || [])[0] || "규칙적 운동과 수면" },
+                revenue: { score: 65, advice: (src.revenuePolicy || [])[0] || "기존 매출원 최적화 및 현금흐름 점검" },
+                relationship: { score: 55, advice: (src.relationshipPolicy || [])[0] || "핵심 관계 3인에 집중, 무리한 네트워킹 자제" },
+                recovery: { score: 75, advice: (src.recoveryPolicy || [])[0] || "규칙적 수면과 주 2회 유산소 회복 루틴" },
               },
-              actionCalendar: (fo.monthlyActionCalendar || []).map((w: any) => ({
-                week: w.week,
-                focus: w.recommendedFocus || "",
-              })),
+              actionCalendar: Array.isArray(src.monthlyActionCalendar) && src.monthlyActionCalendar.length > 0
+                ? src.monthlyActionCalendar.map((w: any) => ({
+                    week: w.week,
+                    policyMode: w.policyMode || "Consolidation",
+                    focus: w.recommendedFocus || w.focus || "",
+                    forbiddenFocus: w.forbiddenFocus || "",
+                  }))
+                : [
+                    { week: "1주차", policyMode: "Consolidation", focus: "현황 진단 및 우선순위 정리" },
+                    { week: "2주차", policyMode: "Expansion", focus: "핵심 과제 집중 실행" },
+                    { week: "3주차", policyMode: "Cleanup", focus: "관계 소통 및 미결 사항 정리" },
+                    { week: "4주차", policyMode: "Recovery", focus: "월간 회고 및 다음 달 전략" },
+                  ],
             };
-            localStorage.setItem("monthly-forecast-cache", JSON.stringify(mapped));
-            setData(mapped);
-            if (apiData.richOutput) {
-              setRichData(apiData.richOutput);
+
+            if (!mapped.conclusion) {
+              generateLocalMonthly();
+            } else {
+              localStorage.setItem("monthly-forecast-cache", JSON.stringify(mapped));
+              setData(mapped);
+              if (apiData.richOutput) {
+                setRichData(apiData.richOutput);
+              }
             }
           } else {
             generateLocalMonthly();
@@ -189,22 +251,19 @@ export default function MonthlyPage() {
     };
 
     const generateLocalMonthly = () => {
-      const cached = localStorage.getItem("monthly-forecast-cache");
-      if (cached) {
-        setData(JSON.parse(cached));
-        return;
-      }
       const storedChart = localStorage.getItem("user-manse-chart");
       let dmElement = "토";
       if (storedChart) {
         try { dmElement = JSON.parse(storedChart).dayMaster?.element || "토"; } catch { }
       }
-      const elementMap: Record<string, string> = { "木": "목성(木)", "火": "화성(火)", "土": "토성(土)", "金": "금성(金)", "水": "수성(水)", "목": "목성(木)", "화": "화성(火)", "토": "토성(土)", "금": "금성(金)", "수": "수성(水)" };
+      const elementMap: Record<string, string> = { "木": "목(木)", "火": "화(火)", "土": "토(土)", "金": "금(金)", "水": "수(水)", "목": "목(木)", "화": "화(火)", "토": "토(土)", "금": "금(金)", "수": "수(水)", "wood": "목(木)", "fire": "화(火)", "earth": "토(土)", "metal": "금(金)", "water": "수(水)" };
 
       const monthlyData = {
-        conclusion: `이번 달은 ${elementMap[dmElement] || "토성(土)"}의 영향으로 내면 탐색과 전략 수립에 적합합니다.`,
+        conclusion: `이번 달은 일간 ${elementMap[dmElement] || "토(土)"}의 구조적 기류 아래, 내면 탐색과 중장기 전략 수립에 적합합니다.`,
         conceptPortfolio: [{ name: "재정비", weight: 0.4, state: "cleanup" }, { name: "학습", weight: 0.3, state: "expansion" }, { name: "관계정리", weight: 0.3, state: "consolidation" }],
         riskPortfolio: [{ domain: "재무", level: "medium", note: "불필요한 지출 모니터링 필요" }, { domain: "건강", level: "low", note: "수면 패턴 안정적" }, { domain: "관계", level: "high", note: "핵심 관계 재정립 시점" }],
+        evidenceTarget: ["핵심 프로젝트 성과 지표 2건 데이터화", "주요 의사결정 전 체크리스트 3항목 검증"],
+        boundaryPolicy: ["검증되지 않은 신규 확장 요청 24시간 보류", "주 2회 이상 야간 업무 금지 및 회복 시간 확보"],
         threePillars: { revenue: { score: 65, advice: "보수적 운영, 기존 매출원 최적화" }, relationship: { score: 45, advice: "핵심 인맥 3인에 집중, 확장 자제" }, recovery: { score: 80, advice: "규칙적 수면과 주 2회 운동 유지" } },
         actionCalendar: [{ week: "1주차", focus: "현황 진단" }, { week: "2주차", focus: "우선순위 재설정" }, { week: "3주차", focus: "관계 소통" }, { week: "4주차", focus: "회고" }],
       };
@@ -219,6 +278,8 @@ export default function MonthlyPage() {
     conclusion: "",
     conceptPortfolio: [],
     riskPortfolio: [],
+    evidenceTarget: [],
+    boundaryPolicy: [],
     threePillars: { revenue: { score: 0, advice: "" }, relationship: { score: 0, advice: "" }, recovery: { score: 0, advice: "" } },
     actionCalendar: [],
   };
@@ -344,6 +405,39 @@ export default function MonthlyPage() {
                   <p className="text-xs text-zinc-500">{r.note}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* EvidenceTargetCard & BoundaryPolicyCard (08_UI_UX_SPEC.md §5.8) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <Target className="w-4 h-4 text-emerald-400" />
+                이번 달 근거 확보 목표 (Evidence Target)
+              </h3>
+              <ul className="space-y-3">
+                {(mockData.evidenceTarget || []).map((item: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-3 text-xs text-zinc-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-400" />
+                이번 달 경계선 정책 (Boundary Policy)
+              </h3>
+              <ul className="space-y-3">
+                {(mockData.boundaryPolicy || []).map((item: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-3 text-xs text-zinc-300">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1.5" />
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
 

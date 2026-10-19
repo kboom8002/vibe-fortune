@@ -12,7 +12,7 @@ import { PersonalContextSchema } from "./personal-context.schema";
 // POST /api/profile/birth
 export const BirthProfileRequestSchema = z.object({
   name: z.string().min(1),
-  birthDateTime: z.string().datetime(),
+  birthDateTime: z.string().datetime({ offset: true }),
   timezone: z.string().min(1),
   gender: GenderSchema,
   birthLocation: z.string().optional(),
@@ -49,6 +49,15 @@ export const VibeCheckinResponseSchema = z.object({
 // POST /api/forecast/daily
 export const DailyForecastRequestSchema = z.object({
   birthProfileId: z.string().optional(),
+  birthProfile: BirthProfileSchema.partial().optional(),
+  providedChart: z.object({
+    yearPillar: z.string().optional(),
+    monthPillar: z.string().optional(),
+    dayPillar: z.string().optional(),
+    hourPillar: z.string().optional(),
+  }).optional(),
+  personalContext: PersonalContextSchema.optional(),
+  recentRunReceipts: z.array(RunReceiptSchema.partial()).optional(),
   targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   vibeCheckInId: z.string().optional(),
   vibeCheckIn: VibeCheckinRequestSchema.partial().optional(),
@@ -60,7 +69,7 @@ export const DailyForecastResponseSchema = z.object({
   status: z.enum(["ok", "blocked", "onboarding_required", "partial"]),
   forecastOutput: ForecastOutputSchema.optional(),
   // 풍부한 일일 예보 (richOutput 존재 시 DailyForecastOutputSchema 사용)
-  richOutput: DailyForecastOutputSchema.optional(),
+  richOutput: DailyForecastOutputSchema.partial().optional(),
   estimatedVibe: VibeCheckInSchema.optional(),
   warnings: z.array(AgentWarningSchema),
   safetyFlags: z.array(SafetyFlagSchema),
@@ -69,6 +78,9 @@ export const DailyForecastResponseSchema = z.object({
 // POST /api/forecast/weekly
 export const WeeklyForecastRequestSchema = z.object({
   birthProfileId: z.string().optional(),
+  birthProfile: BirthProfileSchema.partial().optional(),
+  personalContext: PersonalContextSchema.optional(),
+  recentRunReceipts: z.array(RunReceiptSchema.partial()).optional(),
   targetWeekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   vibeCheckInId: z.string().optional(),
   vibeCheckIn: VibeCheckinRequestSchema.partial().optional(),
@@ -87,6 +99,9 @@ export const WeeklyForecastResponseSchema = z.object({
 // POST /api/forecast/monthly
 export const MonthlyForecastRequestSchema = z.object({
   birthProfileId: z.string().optional(),
+  birthProfile: BirthProfileSchema.partial().optional(),
+  personalContext: PersonalContextSchema.optional(),
+  recentRunReceipts: z.array(RunReceiptSchema.partial()).optional(),
   targetMonth: z.string().regex(/^\d{4}-\d{2}$/),
   vibeCheckInId: z.string().optional(),
   vibeCheckIn: VibeCheckinRequestSchema.partial().optional(),
@@ -100,6 +115,12 @@ export const MonthlyForecastResponseSchema = z.object({
   estimatedVibe: VibeCheckInSchema.optional(),
   warnings: z.array(AgentWarningSchema),
   safetyFlags: z.array(SafetyFlagSchema),
+});
+
+// GET /api/history
+export const HistoryResponseSchema = z.object({
+  forecasts: z.array(ForecastOutputSchema),
+  receipts: z.array(RunReceiptSchema),
 });
 
 // POST /api/run-receipt

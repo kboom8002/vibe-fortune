@@ -33,6 +33,18 @@ export const WeeklyForecastOutputSchema = z.object({
   weeklyBoundaryTarget: z.string().min(1),
   weeklyConversionTarget: z.string().min(1),
   recompositionGoal: z.string().min(1),
+  riskTrajectory: z.array(z.object({
+    date: z.string().optional(),
+    day: z.string().optional(),
+    primaryRisk: z.string().optional(),
+    level: z.enum(["low", "medium", "high"]).optional(),
+    policyMode: z.enum(["Expansion", "Consolidation", "Cleanup", "Recovery"]).optional(),
+  })).optional(),
+  runReceiptSummary: z.object({
+    completedCount: z.number(),
+    deferredCount: z.number(),
+    repeatedPatterns: z.array(z.string()),
+  }).optional(),
   actionPolicy: z.object({
     requiredActions: z.array(z.string()),
     forbiddenActions: z.array(z.string()),
@@ -57,7 +69,7 @@ export const MonthlyForecastOutputSchema = z.object({
   recoveryPolicy: z.array(z.string()),
   monthlyActionCalendar: z.array(z.object({
     week: z.string(),
-    policyMode: z.enum(["Consolidation", "Expansion", "Cleanup"]),
+    policyMode: z.enum(["Consolidation", "Expansion", "Cleanup", "Recovery"]),
     recommendedFocus: z.string(),
     forbiddenFocus: z.string(),
   })),

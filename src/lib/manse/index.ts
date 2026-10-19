@@ -5,6 +5,7 @@ import {
   STEM_ELEMENTS,
   STEM_POLARITIES,
   BRANCH_MAIN_ELEMENTS,
+  BRANCH_ELEMENTS,
   HIDDEN_STEMS,
   DEFAULT_MANSE_POLICY,
   HeavenlyStem,
@@ -26,13 +27,26 @@ import { ManseWarning } from "@/schemas/manse-chart.schema";
 import { ProvidedChartSchema } from "@/schemas/birth-profile.schema";
 import { z } from "zod";
 import { calculateDayMasterStrengthAndYongSin } from "./strength-yongsin";
+import {
+  calculateTenGods,
+  calculateTenGodsForBranch,
+  calculateAllTenGods,
+} from "./ten-gods";
 
+function createPillar(stem: HeavenlyStem, branch: EarthlyBranch) {
+  return {
+    stem,
+    branch,
+    label: `${stem}${branch}`,
+  };
+}
 
 // Helper to format ISO datetime into target timezone parts
 function getLocalTimeParts(birthDateTime: string, timezone: string) {
+  const effectiveTimezone = timezone || "Asia/Seoul";
   const d = new Date(birthDateTime);
   const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
+    timeZone: effectiveTimezone,
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -54,53 +68,6 @@ function getLocalTimeParts(birthDateTime: string, timezone: string) {
   };
 }
 
-// 10대 천간 십성 계산기
-function calculateTenGod(dm: HeavenlyStem, other: HeavenlyStem): string {
-  const dmElem = STEM_ELEMENTS[dm];
-  const otherElem = STEM_ELEMENTS[other];
-  const dmPol = STEM_POLARITIES[dm];
-  const otherPol = STEM_POLARITIES[other];
-
-  const isSamePol = dmPol === otherPol;
-
-  if (dmElem === "wood") {
-    if (otherElem === "wood") return isSamePol ? "비견" : "겁재";
-    if (otherElem === "fire") return isSamePol ? "식신" : "상관";
-    if (otherElem === "earth") return isSamePol ? "편재" : "정재";
-    if (otherElem === "metal") return isSamePol ? "편관" : "정관";
-    if (otherElem === "water") return isSamePol ? "편인" : "정인";
-  }
-  if (dmElem === "fire") {
-    if (otherElem === "fire") return isSamePol ? "비견" : "겁재";
-    if (otherElem === "earth") return isSamePol ? "식신" : "상관";
-    if (otherElem === "metal") return isSamePol ? "편재" : "정재";
-    if (otherElem === "water") return isSamePol ? "편관" : "정관";
-    if (otherElem === "wood") return isSamePol ? "편인" : "정인";
-  }
-  if (dmElem === "earth") {
-    if (otherElem === "earth") return isSamePol ? "비견" : "겁재";
-    if (otherElem === "metal") return isSamePol ? "식신" : "상관";
-    if (otherElem === "water") return isSamePol ? "편재" : "정재";
-    if (otherElem === "wood") return isSamePol ? "편관" : "정관";
-    if (otherElem === "fire") return isSamePol ? "편인" : "정인";
-  }
-  if (dmElem === "metal") {
-    if (otherElem === "metal") return isSamePol ? "비견" : "겁재";
-    if (otherElem === "water") return isSamePol ? "식신" : "상관";
-    if (otherElem === "wood") return isSamePol ? "편재" : "정재";
-    if (otherElem === "fire") return isSamePol ? "편관" : "정관";
-    if (otherElem === "earth") return isSamePol ? "편인" : "정인";
-  }
-  if (dmElem === "water") {
-    if (otherElem === "water") return isSamePol ? "비견" : "겁재";
-    if (otherElem === "wood") return isSamePol ? "식신" : "상관";
-    if (otherElem === "fire") return isSamePol ? "편재" : "정재";
-    if (otherElem === "earth") return isSamePol ? "편관" : "정관";
-    if (otherElem === "metal") return isSamePol ? "편인" : "정인";
-  }
-  return "";
-}
-
 /**
  * 4.1 calculateChart
  * 결정론적으로 사주명식을 산출한다.
@@ -110,7 +77,7 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
   const warnings: ManseWarning[] = [];
 
   // 타임존 경고 추가
-  if (input.timezone !== "Asia/Seoul" && input.timezone !== "UTC") {
+  if (!input.timezone || (input.timezone !== "Asia/Seoul" && input.timezone !== "UTC")) {
     warnings.push("TIMEZONE_UNCERTAIN");
   }
 
@@ -119,8 +86,22 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
     warnings.push("GENDER_UNSPECIFIED");
   }
 
+  // 진태양시 비활성화 정책 경고
+  if (policy.trueSolarTime === false) {
+    warnings.push("TRUE_SOLAR_TIME_DISABLED");
+  }
+
   try {
-    const { year, month, day, hour, minute } = getLocalTimeParts(input.birthDateTime, input.timezone);
+    const { year, month, day, hour, minute } = getLocalTimeParts(
+      input.birthDateTime,
+      input.timezone || "Asia/Seoul"
+    );
+
+    // 야자시(23시) 정책 경고
+    if (policy.nightZiPolicy === "disabled" && hour === 23) {
+      warnings.push("NIGHT_ZI_DISABLED");
+      warnings.push("POLICY_VARIANT_MAY_DIFFER");
+    }
 
     // solar-lunar 변환
     const solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
@@ -167,15 +148,20 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
       water: Math.round(dist.water * 10) / 10,
     };
 
-    // 일간 (Day Master)
+    // 일간 (Day Master) — 5개 인자 모두 전달 (월령 가중치 및 통근 보너스 반영)
+    const dayElement = STEM_ELEMENTS[dayStem];
+    const elementProfile = fiveElementDistribution;
     const strengthResult = calculateDayMasterStrengthAndYongSin(
-      STEM_ELEMENTS[dayStem],
-      fiveElementDistribution
+      dayElement,
+      elementProfile,
+      dayStem,
+      BRANCH_ELEMENTS[monthBranch],
+      [yearBranch, monthBranch, dayBranch, hourBranch]
     );
 
     const dayMaster = {
       stem: dayStem,
-      element: STEM_ELEMENTS[dayStem],
+      element: dayElement,
       polarity: STEM_POLARITIES[dayStem],
       strength: {
         score: strengthResult.score,
@@ -184,15 +170,16 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
       yongSin: strengthResult.yongSin,
     };
 
-    // 십성 계산
+    // 십성 계산 (천간 + 지지 본기 십신 모두 산출)
     const tenGods = {
-      yearStem: calculateTenGod(dayStem, yearStem),
-      yearBranch: calculateTenGod(dayStem, yearBranch as unknown as HeavenlyStem), // branch main element
-      monthStem: calculateTenGod(dayStem, monthStem),
-      monthBranch: calculateTenGod(dayStem, monthBranch as unknown as HeavenlyStem),
-      dayBranch: calculateTenGod(dayStem, dayBranch as unknown as HeavenlyStem),
-      hourStem: calculateTenGod(dayStem, hourStem),
-      hourBranch: calculateTenGod(dayStem, hourBranch as unknown as HeavenlyStem),
+      yearStem: calculateTenGods(dayStem, yearStem),
+      yearBranch: calculateTenGodsForBranch(dayStem, yearBranch),
+      monthStem: calculateTenGods(dayStem, monthStem),
+      monthBranch: calculateTenGodsForBranch(dayStem, monthBranch),
+      dayStem: "일주",
+      dayBranch: calculateTenGodsForBranch(dayStem, dayBranch),
+      hourStem: calculateTenGods(dayStem, hourStem),
+      hourBranch: calculateTenGodsForBranch(dayStem, hourBranch),
     };
 
     const id = crypto.randomUUID();
@@ -204,10 +191,10 @@ export function calculateChart(input: CalculateChartInput): ChartResult {
       birthProfileId,
       birthDateTime: input.birthDateTime,
       pillars: {
-        year: { stem: yearStem, branch: yearBranch, label: yearStem + yearBranch },
-        month: { stem: monthStem, branch: monthBranch, label: monthStem + monthBranch },
-        day: { stem: dayStem, branch: dayBranch, label: dayStem + dayBranch },
-        hour: { stem: hourStem, branch: hourBranch, label: hourStem + hourBranch },
+        year: createPillar(yearStem, yearBranch),
+        month: createPillar(monthStem, monthBranch),
+        day: createPillar(dayStem, dayBranch),
+        hour: createPillar(hourStem, hourBranch),
       },
       dayMaster,
       tenGods,
@@ -237,8 +224,11 @@ export function calculateMajorLuck(input: CalculateMajorLuckInput): MajorLuckRes
   const genderCode = input.gender === "female" ? 0 : 1;
 
   try {
-    const { year, month, day, hour } = getLocalTimeParts(input.chart.birthDateTime, "Asia/Seoul");
-    const solar = Solar.fromYmdHms(year, month, day, hour, 0, 0);
+    const { year, month, day, hour, minute } = getLocalTimeParts(
+      input.chart.birthDateTime,
+      "Asia/Seoul"
+    );
+    const solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
     const lunar = solar.getLunar();
     const eightChar = lunar.getEightChar();
 
@@ -247,20 +237,38 @@ export function calculateMajorLuck(input: CalculateMajorLuckInput): MajorLuckRes
     const daYunList = rawDaYunList.filter(dy => dy.getGanZhi() !== "");
     const startAge = daYunList[0] ? daYunList[0].getStartAge() : 1;
 
-    const cycles = daYunList.map(dy => {
-      const stem = dy.getGanZhi().substring(0, 1);
-      const branch = dy.getGanZhi().substring(1, 2);
+    const cycles = daYunList.map((dy, i) => {
+      const stem = dy.getGanZhi().substring(0, 1) as HeavenlyStem;
+      const branch = dy.getGanZhi().substring(1, 2) as EarthlyBranch;
+      const cycleStartAge = dy.getStartAge();
+      const startYear =
+        typeof (dy as any).getStartYear === "function"
+          ? (dy as any).getStartYear()
+          : year + cycleStartAge - 1;
+      const startDate = `${startYear}-01-01`;
+
       return {
+        index: i,
+        ageFrom: cycleStartAge,
+        ageTo: cycleStartAge + 9,
+        dateFrom: startDate,
+        pillar: createPillar(stem, branch),
         stem,
         branch,
         ganzhi: dy.getGanZhi(),
-        startAge: dy.getStartAge(),
+        stemElement: STEM_ELEMENTS[stem],
+        branchElement: BRANCH_ELEMENTS[branch],
+        startAge: cycleStartAge,
+        endAge: cycleStartAge + 9,
+        startDate,
       };
     });
 
     const yearStem = input.chart.pillars.year.stem;
     const yinyang = STEM_POLARITIES[yearStem as HeavenlyStem];
-    const forward = (yinyang === "yang" && input.gender !== "female") || (yinyang === "yin" && input.gender === "female");
+    const forward =
+      (yinyang === "yang" && input.gender !== "female") ||
+      (yinyang === "yin" && input.gender === "female");
 
     return {
       id: crypto.randomUUID(),
@@ -269,7 +277,9 @@ export function calculateMajorLuck(input: CalculateMajorLuckInput): MajorLuckRes
       chartId: input.chart.id,
       direction: forward ? "forward" : "backward",
       startAge,
+      startDate: cycles[0]?.startDate,
       cycles,
+      periods: cycles,
       calculationPolicy: policy,
       warnings,
       createdAt: new Date().toISOString(),
@@ -284,15 +294,16 @@ export function calculateMajorLuck(input: CalculateMajorLuckInput): MajorLuckRes
  * 4.3 calculateAnnualLuck
  * 지정된 해의 세운(연운)을 산출한다.
  */
-export function calculateAnnualLuck(input: CalculateAnnualLuckInput): AnnualLuckResult {
-  const index = (input.year - 4) % 60;
+export function calculateAnnualLuck(inputOrYear: CalculateAnnualLuckInput | number): AnnualLuckResult {
+  const year = typeof inputOrYear === "number" ? inputOrYear : inputOrYear.year;
+  const index = (year - 4) % 60;
   const normalizedIndex = index < 0 ? index + 60 : index;
 
   const stem = HEAVENLY_STEMS[normalizedIndex % 10];
   const branch = EARTHLY_BRANCHES[normalizedIndex % 12];
 
   return {
-    year: input.year,
+    year,
     pillar: {
       stem,
       branch,
@@ -303,14 +314,19 @@ export function calculateAnnualLuck(input: CalculateAnnualLuckInput): AnnualLuck
 
 /**
  * 4.3b calculateMonthlyLuck
- * 지정된 연/월의 월운을 결정론적으로 산출한다.
- * 양력 해당월 중순(15일) 기준으로 lunar-javascript를 통해 월간·월지를 산출.
+ * 지정된 연/월(/일)의 월운을 결정론적으로 산출한다.
+ * 기본값은 해당월 중순(15일)이며, day를 지정하면 절기 경계를 반영한다.
  */
-export function calculateMonthlyLuck(input: CalculateMonthlyLuckInput): MonthlyLuckResult {
-  const { year, month } = input;
+export function calculateMonthlyLuck(
+  inputOrYear: CalculateMonthlyLuckInput | number,
+  monthArg?: number,
+  dayArg: number = 15
+): MonthlyLuckResult {
+  const year = typeof inputOrYear === "number" ? inputOrYear : inputOrYear.year;
+  const month = typeof inputOrYear === "number" ? monthArg! : inputOrYear.month;
+  const day = typeof inputOrYear === "number" ? dayArg : (inputOrYear.day ?? 15);
 
-  // 해당 월의 중순(15일)을 기준으로 월주를 산출
-  const solar = Solar.fromYmd(year, month, 15);
+  const solar = Solar.fromYmd(year, month, day);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
 
@@ -331,16 +347,23 @@ export function calculateMonthlyLuck(input: CalculateMonthlyLuckInput): MonthlyL
 /**
  * 4.4 calculateDailyLuckRange
  * 주어진 범위 내 일운(일주) 목록을 산출한다.
+ * YYYY-MM-DD를 Date.UTC로 파싱하여 로컬/UTC 타임존 혼용으로 인한 날짜 밀림을 방지한다.
  */
 export function calculateDailyLuckRange(input: CalculateDailyLuckRangeInput): DailyLuckRangeResult {
-  const startDate = new Date(input.from);
-  const endDate = new Date(input.to);
+  const parseYmdUtc = (dateStr: string): number => {
+    const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+
+  const startMs = parseYmdUtc(input.from);
+  const endMs = parseYmdUtc(input.to);
   const days: DailyLuckRangeResult["days"] = [];
 
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const day = d.getDate();
+  for (let ms = startMs; ms <= endMs; ms += 86400_000) {
+    const d = new Date(ms);
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
+    const day = d.getUTCDate();
 
     const solar = Solar.fromYmd(y, m, day);
     const lunar = solar.getLunar();
@@ -349,8 +372,10 @@ export function calculateDailyLuckRange(input: CalculateDailyLuckRangeInput): Da
     const stem = eightChar.getDayGan() as HeavenlyStem;
     const branch = eightChar.getDayZhi() as EarthlyBranch;
 
+    const dateFormatted = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
     days.push({
-      date: d.toISOString().split("T")[0],
+      date: dateFormatted,
       pillar: {
         stem,
         branch,

@@ -36,6 +36,12 @@ export const ContextTensorSchema = z.object({
   channelAxis: z.enum(["daily_board", "weekly_review", "monthly_plan", "relationship_message", "business_strategy", "general"]),
   // 개인 맥락 축: PersonalContext 필드를 통해 TCO pack 개념 활성화를 조정
   personalContextAxis: PersonalContextSchema.optional(),
+  executionHistorySummary: z.object({
+    completionRate: z.number().min(0).max(1),
+    recentTrend: z.enum(["improving", "stable", "declining"]),
+    deferredCount: z.number().int().min(0),
+    recurringPatterns: z.array(z.string()),
+  }).optional(),
   createdAt: IsoDateTimeSchema,
 });
 

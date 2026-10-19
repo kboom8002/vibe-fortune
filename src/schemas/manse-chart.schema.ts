@@ -3,6 +3,8 @@ import { IdSchema, IsoDateTimeSchema, PillarSchema, HeavenlyStemSchema, FiveElem
 import { MansePolicySchema } from "./birth-profile.schema";
 
 export const ManseWarningSchema = z.enum([
+  "BIRTH_TIME_MISSING",
+  "BIRTH_TIME_UNKNOWN",
   "SOLAR_TERM_APPROXIMATED",
   "TIMEZONE_UNCERTAIN",
   "GENDER_UNSPECIFIED",
@@ -59,10 +61,19 @@ export type ManseChart = z.infer<typeof ManseChartSchema>;
 export type ManseWarning = z.infer<typeof ManseWarningSchema>;
 
 export const MajorLuckCycleSchema = z.object({
+  index: z.number().optional(),
+  ageFrom: z.number().optional(),
+  ageTo: z.number().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  pillar: PillarSchema.optional(),
   stem: z.string(),
   branch: z.string(),
   ganzhi: z.string(),
+  stemElement: z.string().optional(),
+  branchElement: z.string().optional(),
   startAge: z.number(),
+  endAge: z.number().optional(),
   startDate: z.string().optional(),
 });
 
@@ -75,6 +86,7 @@ export const MajorLuckResultSchema = z.object({
   startAge: z.number(),
   startDate: z.string().optional(),
   cycles: z.array(MajorLuckCycleSchema),
+  periods: z.array(MajorLuckCycleSchema).optional(),
   calculationPolicy: MansePolicySchema,
   warnings: z.array(ManseWarningSchema),
   createdAt: z.string(),

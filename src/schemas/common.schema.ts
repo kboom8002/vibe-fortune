@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const IdSchema = z.string().min(1);
-export const IsoDateTimeSchema = z.string().datetime();
+export const IsoDateTimeSchema = z.string().datetime({ offset: true });
 export const RiskScoreSchema = z.number().min(0).max(1);
 export const VibeScoreSchema = z.number().min(0).max(10);
 

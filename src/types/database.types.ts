@@ -16,6 +16,7 @@ export interface Database {
           display_name: string | null
           default_timezone: string
           preferred_language: string
+          rlhf_bias: Json | null
           created_at: string
           updated_at: string
         }
@@ -25,6 +26,7 @@ export interface Database {
           display_name?: string | null
           default_timezone?: string
           preferred_language?: string
+          rlhf_bias?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -34,6 +36,7 @@ export interface Database {
           display_name?: string | null
           default_timezone?: string
           preferred_language?: string
+          rlhf_bias?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -458,6 +461,35 @@ export interface Database {
           severity?: string
           input_excerpt?: string | null
           action_taken?: string
+          created_at?: string
+        }
+      }
+      forecast_feedbacks: {
+        Row: {
+          id: string
+          user_id: string
+          forecast_output_id: string
+          rating: number
+          feedback_tags: Json
+          comment: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          forecast_output_id: string
+          rating: number
+          feedback_tags?: Json
+          comment?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          forecast_output_id?: string
+          rating?: number
+          feedback_tags?: Json
+          comment?: string | null
           created_at?: string
         }
       }

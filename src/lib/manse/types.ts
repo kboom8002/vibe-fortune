@@ -58,10 +58,19 @@ export type CalculateMajorLuckInput = {
 };
 
 export type MajorLuckCycle = {
+  index?: number;
+  ageFrom?: number;
+  ageTo?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  pillar?: Pillar;
   stem: string;
   branch: string;
   ganzhi: string;
+  stemElement?: "wood" | "fire" | "earth" | "metal" | "water";
+  branchElement?: "wood" | "fire" | "earth" | "metal" | "water";
   startAge: number;
+  endAge?: number;
   startDate?: string;
 };
 
@@ -74,6 +83,7 @@ export type MajorLuckResult = {
   startAge: number;
   startDate?: string;
   cycles: MajorLuckCycle[];
+  periods?: MajorLuckCycle[];
   calculationPolicy: MansePolicy;
   warnings: ManseWarning[];
   createdAt: string;
@@ -104,6 +114,7 @@ export type DailyLuckRangeResult = {
 export type CalculateMonthlyLuckInput = {
   year: number;
   month: number; // 1~12
+  day?: number; // 1~31 (default 15)
 };
 
 export type MonthlyLuckResult = {

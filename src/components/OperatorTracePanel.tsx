@@ -14,6 +14,8 @@ interface OperatorTracePanelProps {
   operators?: TriggeredOperator[];
   chartData?: any;
   vibeData?: any;
+  activeOperators?: string[];
+  Mode?: string;
 }
 
 // Deterministic operator generation

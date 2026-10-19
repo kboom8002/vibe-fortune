@@ -194,20 +194,33 @@ export default function WeeklyPage() {
       try {
         const now = new Date();
         const from = now.toISOString().split("T")[0];
-        const toDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const to = toDate.toISOString().split("T")[0];
 
-        // Load personal context for API personalization
         let personalContext: any = undefined;
+        let birthProfile: any = undefined;
+        let recentRunReceipts: any[] = [];
         try {
           const storedCtx = localStorage.getItem("personal-context");
           if (storedCtx) personalContext = JSON.parse(storedCtx);
+        } catch { /* ignore */ }
+        try {
+          const storedProfile = localStorage.getItem("user-birth-profile");
+          if (storedProfile) birthProfile = JSON.parse(storedProfile);
+        } catch { /* ignore */ }
+        try {
+          const storedReceipts = localStorage.getItem("user-run-receipts") || localStorage.getItem("run-receipts");
+          if (storedReceipts) recentRunReceipts = JSON.parse(storedReceipts);
         } catch { /* ignore */ }
 
         const res = await fetch("/api/forecast/weekly", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetWeekStart: from, currentFocus: ["business_finance"], personalContext }),
+          body: JSON.stringify({
+            targetWeekStart: from,
+            currentFocus: ["business_finance"],
+            birthProfile,
+            personalContext,
+            recentRunReceipts,
+          }),
         });
 
         if (res.ok) {
@@ -220,42 +233,83 @@ export default function WeeklyPage() {
             generateLocalDailyRhythm();
           }
 
-          if (apiData.forecastOutput) {
-            const fo = apiData.forecastOutput;
+          const fo = apiData.forecastOutput;
+          const wr = apiData.weeklyReview || (fo && (fo.outputJson || fo)) || null;
+          if (wr || fo) {
+            const src = { ...(fo || {}), ...((fo && fo.outputJson) || {}), ...(apiData.weeklyReview || {}) };
+            const completedFromLocal = recentRunReceipts.filter((r: any) => Boolean(r.whatIDid)).length;
+            const deferredFromLocal = recentRunReceipts.filter((r: any) => Boolean(r.whatIDeferred && r.whatIDeferred !== "N/A")).length;
+            const rawSummary = src.runReceiptSummary;
+            const normalizedReceiptSummary =
+              rawSummary && typeof rawSummary === "object"
+                ? {
+                    completedCount: rawSummary.completedCount ?? completedFromLocal,
+                    deferredCount: rawSummary.deferredCount ?? deferredFromLocal,
+                    repeatedPatterns: Array.isArray(rawSummary.repeatedPatterns) && rawSummary.repeatedPatterns.length > 0
+                      ? rawSummary.repeatedPatterns
+                      : ["핵심 과제 집중 후 에너지 관리 패턴 점검 필요"],
+                  }
+                : {
+                    completedCount: completedFromLocal,
+                    deferredCount: deferredFromLocal,
+                    repeatedPatterns:
+                      typeof rawSummary === "string" && rawSummary
+                        ? [rawSummary]
+                        : recentRunReceipts.length > 0
+                          ? recentRunReceipts.slice(0, 2).map((r: any) => r.whatILearned || r.whatIDid).filter(Boolean)
+                          : ["최근 7일 실행 기록을 축적하여 주간 패턴을 추적합니다"],
+                  };
+
             const mapped = {
-              conclusion: fo.oneLineConclusion || fo.conclusion || "",
-              coreConcept: { name: "정리", state: fo.weeklyCoreConcept || "consolidation", confidence: 0.82 },
-              gapAnalysis: fo.weeklyPrimaryGap || "",
+              conclusion: src.oneLineConclusion || src.conclusion || src.summary || fo?.outputMarkdown?.substring(0, 200) || "",
+              coreConcept: {
+                name: src.weeklyCoreConcept || src.coreConcept || "정리·통합 (Consolidation)",
+                state: src.weeklyCoreConcept || src.conceptState || "consolidation",
+                confidence: 0.85,
+              },
+              gapAnalysis: src.weeklyPrimaryGap || src.gapAnalysis || "근거 확보와 경계 설정을 병행하여 주간 실행 밀도를 높이세요.",
               targets: {
-                evidence: [fo.weeklyEvidenceTarget || "핵심 과제 2건 완료"],
-                boundary: [fo.weeklyBoundaryTarget || "과도한 야근 주의"],
-                conversion: [fo.weeklyConversionTarget || "아이디어를 실행 계획으로 전환"],
+                evidence: Array.isArray(src.weeklyEvidenceTarget) ? src.weeklyEvidenceTarget : [src.weeklyEvidenceTarget || "핵심 과제 2건 완료 및 검증"],
+                boundary: Array.isArray(src.weeklyBoundaryTarget) ? src.weeklyBoundaryTarget : [src.weeklyBoundaryTarget || "과도한 야근 및 무리한 확약 주의"],
+                conversion: Array.isArray(src.weeklyConversionTarget) ? src.weeklyConversionTarget : [src.weeklyConversionTarget || "아이디어를 주간 실행 체크리스트로 전환"],
               },
-              riskTrajectory: [
-                { day: "월", level: "low" }, { day: "화", level: "medium" }, { day: "수", level: "medium" },
-                { day: "목", level: "high" }, { day: "금", level: "medium" }, { day: "토", level: "low" }, { day: "일", level: "low" },
-              ],
+              riskTrajectory: Array.isArray(src.riskTrajectory) && src.riskTrajectory.length > 0
+                ? src.riskTrajectory.map((rt: any, idx: number) => ({
+                    day: rt.day || ["월", "화", "수", "목", "금", "토", "일"][idx] || `D+${idx}`,
+                    level: rt.level || rt.riskLevel || "medium",
+                    primaryRisk: rt.primaryRisk,
+                  }))
+                : [
+                    { day: "월", level: "low" }, { day: "화", level: "medium" }, { day: "수", level: "medium" },
+                    { day: "목", level: "high" }, { day: "금", level: "medium" }, { day: "토", level: "low" }, { day: "일", level: "low" },
+                  ],
               actionPolicy: {
-                required: fo.actionPolicy?.requiredActions || ["기존 프로젝트 마감 우선"],
-                forbidden: fo.actionPolicy?.forbiddenActions || ["신규 대규모 투자 결정"],
+                required: src.actionPolicy?.requiredActions || src.requiredActions || ["기존 핵심 프로젝트 마감 우선", "주간 우선순위 3건 외 신규 확장 보류"],
+                forbidden: src.actionPolicy?.forbiddenActions || src.forbiddenActions || ["검증 없는 대규모 투자·계약 확약", "피로 누적 상태에서의 감정적 의사결정"],
+                reviewQuestions: src.actionPolicy?.reviewQuestions || [],
               },
-              reflection: fo.recompositionGoal || "지난 주 보류했던 의사결정 중, 이번 주에 처리할 수 있는 것은 무엇인가요?",
+              runReceiptSummary: normalizedReceiptSummary,
+              reflection: src.recompositionGoal || src.reflectionQuestion || "지난 주 보류했던 의사결정 중, 이번 주에 완료하거나 정리할 수 있는 것은 무엇인가요?",
             };
-            localStorage.setItem("weekly-forecast-cache", JSON.stringify(mapped));
-            setData(mapped);
-            // Capture rich output data
-            if (apiData.richOutput) {
-              setRichData(apiData.richOutput);
+
+            if (!mapped.conclusion) {
+              generateLocalWeekly(recentRunReceipts);
+            } else {
+              localStorage.setItem("weekly-forecast-cache", JSON.stringify(mapped));
+              setData(mapped);
+              if (apiData.richOutput) {
+                setRichData(apiData.richOutput);
+              }
             }
           } else {
-            generateLocalWeekly();
+            generateLocalWeekly(recentRunReceipts);
           }
         } else {
-          generateLocalWeekly();
+          generateLocalWeekly(recentRunReceipts);
           generateLocalDailyRhythm();
         }
       } catch {
-        generateLocalWeekly();
+        generateLocalWeekly([]);
         generateLocalDailyRhythm();
       } finally {
         setLoading(false);
@@ -271,25 +325,21 @@ export default function WeeklyPage() {
         const chart = JSON.parse(storedChart);
         const dmElement: FiveElement = (chart.dayMaster?.element as FiveElement) || "earth";
 
-        // Simple deterministic fallback using day-of-week index cycling through 60 甲子
         const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
         const STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
         const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 
-        // Get Monday of current week
         const now = new Date();
         const day = now.getDay();
         const diff = day === 0 ? -6 : 1 - day;
         const monday = new Date(now);
         monday.setDate(now.getDate() + diff);
 
-        // Use Julian Day Number approximation for stem/branch index
         const rhythm: DailyRhythmEntry[] = [];
         for (let i = 0; i < 7; i++) {
           const d = new Date(monday);
           d.setDate(monday.getDate() + i);
 
-          // Approximate JDN for stem/branch cycling
           const y = d.getFullYear();
           const m = d.getMonth() + 1;
           const dd = d.getDate();
@@ -318,8 +368,7 @@ export default function WeeklyPage() {
       }
     };
 
-    const generateLocalWeekly = () => {
-      // Use stored chart for personalized fallback
+    const generateLocalWeekly = (recentReceipts: any[] = []) => {
       const storedChart = localStorage.getItem("user-manse-chart");
       let dmInfo = "토(earth)";
       if (storedChart) {
@@ -329,11 +378,8 @@ export default function WeeklyPage() {
         } catch { /* ignore */ }
       }
 
-      const cached = localStorage.getItem("weekly-forecast-cache");
-      if (cached) {
-        setData(JSON.parse(cached));
-        return;
-      }
+      const completedCount = recentReceipts.filter((r: any) => Boolean(r.whatIDid)).length;
+      const deferredCount = recentReceipts.filter((r: any) => Boolean(r.whatIDeferred && r.whatIDeferred !== "N/A")).length;
 
       const weeklyData = {
         conclusion: `이번 주는 일간 ${dmInfo}의 기류 아래, 확장보다는 정리와 점검에 적합한 주간입니다. 충동적 결정을 유보하고, 기존 프로젝트의 완결도를 높이는 데 집중하세요.`,
@@ -352,12 +398,19 @@ export default function WeeklyPage() {
           required: ["기존 프로젝트 마감 우선", "데이터 백업 및 정리"],
           forbidden: ["신규 대규모 투자 결정", "감정적 대응 (특히 목요일)"],
         },
+        runReceiptSummary: {
+          completedCount,
+          deferredCount,
+          repeatedPatterns:
+            recentReceipts.length > 0
+              ? recentReceipts.slice(0, 2).map((r: any) => r.whatILearned || r.whatIDid).filter(Boolean)
+              : ["오전 집중 블록에서 실행 완료율이 높고, 오후 늦은 시간대 결정 보류가 유리함"],
+        },
         reflection: "지난 주 보류했던 의사결정 중, 이번 주에 처리할 수 있는 것은 무엇인가요?",
       };
       localStorage.setItem("weekly-forecast-cache", JSON.stringify(weeklyData));
       setData(weeklyData);
 
-      // Local richOutput for weekly
       const storedChartForRich = localStorage.getItem("user-manse-chart");
       const chart = storedChartForRich ? JSON.parse(storedChartForRich) : null;
       if (chart) {
@@ -399,6 +452,7 @@ export default function WeeklyPage() {
     targets: { evidence: [], boundary: [], conversion: [] },
     riskTrajectory: [],
     actionPolicy: { required: [], forbidden: [] },
+    runReceiptSummary: { completedCount: 0, deferredCount: 0, repeatedPatterns: [] },
     reflection: "",
   };
 
@@ -502,6 +556,77 @@ export default function WeeklyPage() {
             </div>
           </div>
 
+          {/* WeeklyActionPolicyCard (Required & Forbidden Actions) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <Target className="w-4 h-4 text-indigo-400" />
+                이번 주 필수 행동 (Required Actions)
+              </h3>
+              <ul className="space-y-3">
+                {(mockData.actionPolicy?.required || []).map((act: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-3 text-sm text-zinc-300">
+                    <span className="w-5 h-5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span className="leading-relaxed">{act}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                이번 주 금지 행동 (Forbidden Actions)
+              </h3>
+              <ul className="space-y-3">
+                {(mockData.actionPolicy?.forbidden || []).map((act: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-3 text-sm text-zinc-300">
+                    <span className="w-5 h-5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
+                      !
+                    </span>
+                    <span className="leading-relaxed">{act}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* RunReceiptSummaryCard (완료한 실행, 보류한 결정, 반복 패턴) */}
+          {mockData.runReceiptSummary && (
+            <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-5">
+              <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-purple-400" />
+                최근 실행 기록 요약 (Run-Receipt Summary)
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/70">
+                  <span className="text-xs text-zinc-500 block mb-1">완료한 실행</span>
+                  <span className="text-2xl font-bold text-emerald-400">
+                    {mockData.runReceiptSummary.completedCount ?? 0}건
+                  </span>
+                </div>
+                <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/70">
+                  <span className="text-xs text-zinc-500 block mb-1">보류한 결정</span>
+                  <span className="text-2xl font-bold text-amber-400">
+                    {mockData.runReceiptSummary.deferredCount ?? 0}건
+                  </span>
+                </div>
+                <div className="col-span-2 sm:col-span-1 p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/70">
+                  <span className="text-xs text-zinc-500 block mb-1">관찰된 반복 패턴</span>
+                  <ul className="space-y-1">
+                    {(mockData.runReceiptSummary.repeatedPatterns || []).map((pat: string, idx: number) => (
+                      <li key={idx} className="text-xs text-zinc-300 leading-relaxed">
+                        • {pat}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Risk Trajectory */}
           <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
             <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
@@ -526,11 +651,11 @@ export default function WeeklyPage() {
             </div>
           </div>
 
-          {/* Reflection */}
+          {/* Reflection / Recomposition Goal */}
           <div className="p-8 rounded-3xl bg-zinc-900/30 border border-zinc-800/80 backdrop-blur-md space-y-4">
             <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider border-b border-zinc-800 pb-3 flex items-center gap-2">
               <Lightbulb className="w-4 h-4 text-amber-400" />
-              성찰 질문
+              주간 재구성 목표 & 성찰 질문
             </h3>
             <p className="text-sm text-zinc-400 italic leading-relaxed">&ldquo;{mockData.reflection}&rdquo;</p>
           </div>

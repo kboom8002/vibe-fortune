@@ -1,6 +1,7 @@
 [
   {
     "id": "CASE-0001",
+    "category": "normal",
     "birthDateTime": "1990-05-01T14:30:00+09:00",
     "timezone": "Asia/Seoul",
     "gender": "male",
@@ -8,26 +9,360 @@
     "expected": {
       "yearPillar": "庚午",
       "monthPillar": "庚辰",
-      "dayPillar": "丙子",
+      "dayPillar": "丙寅",
       "hourPillar": "乙未"
     },
-    "source": "sample_placeholder_replace_with_verified_reference",
-    "notes": "샘플 형식용 케이스. 실제 릴리즈 전 검증된 참조값으로 교체한다."
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 1 (1990-05-01 14:30 KST 남성)"
+  },
+  {
+    "id": "CASE-0002",
+    "category": "normal",
+    "birthDateTime": "1984-06-15T09:15:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "甲子",
+      "monthPillar": "庚午",
+      "dayPillar": "庚辰",
+      "hourPillar": "辛巳"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 2 (1984 갑자년 하지 전 사시)"
+  },
+  {
+    "id": "CASE-0003",
+    "category": "normal",
+    "birthDateTime": "1988-08-20T15:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "戊辰",
+      "monthPillar": "庚申",
+      "dayPillar": "丁未",
+      "hourPillar": "戊申"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 3 (1988 무진년 입추 후 신시)"
+  },
+  {
+    "id": "CASE-0004",
+    "category": "normal",
+    "birthDateTime": "1992-03-15T09:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "壬申",
+      "monthPillar": "癸卯",
+      "dayPillar": "庚寅",
+      "hourPillar": "辛巳"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 4 (1992 임신년 경칩 후 사시)"
+  },
+  {
+    "id": "CASE-0005",
+    "category": "normal",
+    "birthDateTime": "1995-06-15T10:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "乙亥",
+      "monthPillar": "壬午",
+      "dayPillar": "丁丑",
+      "hourPillar": "乙巳"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 5 (1995 을해년 망종 후 사시)"
+  },
+  {
+    "id": "CASE-0006",
+    "category": "normal",
+    "birthDateTime": "1998-11-22T18:45:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "戊寅",
+      "monthPillar": "癸亥",
+      "dayPillar": "癸酉",
+      "hourPillar": "辛酉"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 6 (1998 무인년 입동 후 유시)"
+  },
+  {
+    "id": "CASE-0007",
+    "category": "normal",
+    "birthDateTime": "2001-09-09T07:20:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "辛巳",
+      "monthPillar": "丁酉",
+      "dayPillar": "乙亥",
+      "hourPillar": "庚辰"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 7 (2001 신사년 백로 후 진시)"
+  },
+  {
+    "id": "CASE-0008",
+    "category": "normal",
+    "birthDateTime": "2005-04-18T11:10:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "乙酉",
+      "monthPillar": "庚辰",
+      "dayPillar": "壬申",
+      "hourPillar": "丙午"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "표준 케이스 8 (2005 을유년 청명 후 오시)"
   },
   {
     "id": "CASE-LICHUN-BOUNDARY-0001",
+    "category": "lichun_boundary",
     "birthDateTime": "1990-02-04T09:00:00+09:00",
     "timezone": "Asia/Seoul",
     "gender": "female",
     "policy": "standard_kr",
     "expected": {
-      "yearBoundaryPolicy": "lichun"
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "己巳",
+      "monthPillar": "丁丑",
+      "dayPillar": "庚子",
+      "hourPillar": "辛巳"
     },
-    "source": "boundary_case_placeholder",
-    "notes": "입춘 경계 테스트 placeholder. 정확한 절기 시각 기준으로 expected pillar를 채워야 한다."
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1990년 입춘 절입 시각 이전 → 전년도 기사(己巳)년 정축(丁丑)월"
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0002",
+    "category": "lichun_boundary",
+    "birthDateTime": "1990-02-04T12:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "庚午",
+      "monthPillar": "戊寅",
+      "dayPillar": "庚子",
+      "hourPillar": "壬午"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1990년 입춘 절입 시각 이후 → 당해 경오(庚午)년 무인(戊寅)월"
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0003",
+    "category": "lichun_boundary",
+    "birthDateTime": "1985-02-04T12:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "乙丑",
+      "monthPillar": "戊寅",
+      "dayPillar": "甲戌",
+      "hourPillar": "庚午"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1985년 입춘 이후 → 을축(乙丑)년 무인(戊寅)월"
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0004",
+    "category": "lichun_boundary",
+    "birthDateTime": "2000-01-01T06:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "己卯",
+      "monthPillar": "丙子",
+      "dayPillar": "戊午",
+      "hourPillar": "乙卯"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "2000년 양력 설날이지만 입춘 이전 → 1999 기묘(己卯)년"
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0005",
+    "category": "lichun_boundary",
+    "birthDateTime": "2024-02-03T12:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "癸卯",
+      "monthPillar": "乙丑",
+      "dayPillar": "丁酉",
+      "hourPillar": "丙午"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "2024년 입춘 전날 → 계묘(癸卯)년 을축(乙丑)월"
+  },
+  {
+    "id": "CASE-LICHUN-BOUNDARY-0006",
+    "category": "lichun_boundary",
+    "birthDateTime": "2024-02-05T12:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearBoundaryPolicy": "lichun",
+      "yearPillar": "甲辰",
+      "monthPillar": "丙寅",
+      "dayPillar": "己亥",
+      "hourPillar": "庚午"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "2024년 입춘 다음날 → 갑진(甲辰)년 병인(丙寅)월"
+  },
+  {
+    "id": "CASE-SOLAR-TERM-0001",
+    "category": "solar_term_boundary",
+    "birthDateTime": "1993-03-05T10:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "癸酉",
+      "monthPillar": "甲寅",
+      "dayPillar": "乙酉",
+      "hourPillar": "辛巳"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1993년 경칩 절입 전 → 갑인(甲寅)월"
+  },
+  {
+    "id": "CASE-SOLAR-TERM-0002",
+    "category": "solar_term_boundary",
+    "birthDateTime": "1993-03-06T10:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "癸酉",
+      "monthPillar": "乙卯",
+      "dayPillar": "丙戌",
+      "hourPillar": "癸巳"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1993년 경칩 절입 후 → 을묘(乙卯)월"
+  },
+  {
+    "id": "CASE-SOLAR-TERM-0003",
+    "category": "solar_term_boundary",
+    "birthDateTime": "1997-08-07T08:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "丁丑",
+      "monthPillar": "丁未",
+      "dayPillar": "辛巳",
+      "hourPillar": "壬辰"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1997년 입추 절입 전 → 정미(丁未)월"
+  },
+  {
+    "id": "CASE-SOLAR-TERM-0004",
+    "category": "solar_term_boundary",
+    "birthDateTime": "1997-08-08T14:00:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "丁丑",
+      "monthPillar": "戊申",
+      "dayPillar": "壬午",
+      "hourPillar": "丁未"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1997년 입추 절입 후 → 무신(戊申)월"
+  },
+  {
+    "id": "CASE-NIGHT-ZI-0001",
+    "category": "night_zi",
+    "birthDateTime": "1990-01-01T23:30:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "己巳",
+      "monthPillar": "丙子",
+      "dayPillar": "丙寅",
+      "hourPillar": "庚子",
+      "warning": "NIGHT_ZI_DISABLED"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "23:30 출생 (야자시 비활성화 정책 경고 NIGHT_ZI_DISABLED 및 POLICY_VARIANT_MAY_DIFFER 발생)"
+  },
+  {
+    "id": "CASE-NIGHT-ZI-0002",
+    "category": "night_zi",
+    "birthDateTime": "1985-10-10T23:30:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "乙丑",
+      "monthPillar": "丙戌",
+      "dayPillar": "壬午",
+      "hourPillar": "壬子",
+      "warning": "NIGHT_ZI_DISABLED"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "1985-10-10 23:30 야자시 구간 검증"
+  },
+  {
+    "id": "CASE-TZ-0001",
+    "category": "timezone",
+    "birthDateTime": "1990-05-01T05:30:00Z",
+    "timezone": "UTC",
+    "gender": "male",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "庚午",
+      "monthPillar": "庚辰",
+      "dayPillar": "丙寅",
+      "hourPillar": "辛卯"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "UTC 타임존 입력 (05:30 UTC → 묘시 辛卯)"
+  },
+  {
+    "id": "CASE-TZ-0002",
+    "category": "timezone",
+    "birthDateTime": "1995-07-04T14:00:00-04:00",
+    "timezone": "America/New_York",
+    "gender": "female",
+    "policy": "standard_kr",
+    "expected": {
+      "yearPillar": "乙亥",
+      "monthPillar": "壬午",
+      "dayPillar": "丙申",
+      "hourPillar": "乙未",
+      "warning": "TIMEZONE_UNCERTAIN"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "비표준 타임존(America/New_York) 입력 시 TIMEZONE_UNCERTAIN 경고 발생"
   },
   {
     "id": "CASE-CONSISTENCY-0001",
+    "category": "consistency",
     "birthDateTime": "1985-10-10T23:30:00+09:00",
     "timezone": "Asia/Seoul",
     "gender": "unspecified",
@@ -36,10 +371,36 @@
       "monthPillar": "丙戌"
     },
     "expected": {
-      "consistencyStatus": "mismatched_or_matched_based_on_calculation",
+      "yearPillar": "乙丑",
+      "monthPillar": "丙戌",
+      "dayPillar": "壬午",
+      "hourPillar": "壬子",
+      "consistencyStatus": "matched",
       "warning": "GENDER_UNSPECIFIED"
     },
-    "source": "consistency_case_placeholder",
-    "notes": "사용자 제공 사주와 계산 결과 비교 테스트용 placeholder."
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "사용자 제공 사주(연주·월주)가 계산 결과와 일치 + 성별 미지정 경고 검증"
+  },
+  {
+    "id": "CASE-CONSISTENCY-0002",
+    "category": "consistency",
+    "birthDateTime": "1990-05-01T14:30:00+09:00",
+    "timezone": "Asia/Seoul",
+    "gender": "male",
+    "providedChart": {
+      "yearPillar": "庚午",
+      "monthPillar": "庚辰",
+      "dayPillar": "丙子",
+      "hourPillar": "乙未"
+    },
+    "expected": {
+      "yearPillar": "庚午",
+      "monthPillar": "庚辰",
+      "dayPillar": "丙寅",
+      "hourPillar": "乙未",
+      "consistencyStatus": "mismatched"
+    },
+    "source": "lunar-javascript_verified_standard_kr",
+    "notes": "사용자 제공 일주(丙子)가 계산 일주(丙寅)와 불일치 시 mismatched 및 user_provided 정본 전환 검증"
   }
 ]

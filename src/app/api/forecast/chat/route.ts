@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ChatRequestSchema } from '@/schemas/chat.schema';
+import { checkInputSafety, checkOutputSafety } from '@/lib/safety';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'LLM not available' }, { status: 503 });
     }
 
-    // Safety gate: check message for crisis patterns (AGENTS.md §8)
+    // Safety gate: check message for crisis & forbidden patterns (AGENTS.md §8)
     const dangerousPatterns = [
       /자살|자해/i,
       /약물.*과다/i,
@@ -35,6 +36,18 @@ export async function POST(req: NextRequest) {
           safetyFlag: 'CRISIS_REDIRECT',
         });
       }
+    }
+
+    const inputSafety = checkInputSafety(message);
+    if (!inputSafety.safe) {
+      const isSelfHarm = inputSafety.flags.some((f) => f.type === 'self_harm');
+      return NextResponse.json({
+        reply:
+          inputSafety.flags[0]?.message ||
+          '이 주제에 대해서는 전문 상담사와 상의하시기 바랍니다. 자살예방상담전화: 1393, 정신건강위기상담전화: 1577-0199',
+        safetyFlag: isSelfHarm ? 'CRISIS_REDIRECT' : 'SAFETY_BLOCKED',
+        safetyFlags: inputSafety.flags,
+      });
     }
 
     // Build chat system prompt
@@ -96,7 +109,7 @@ ${forecastSummary || '운세 요약 없음'}`;
             const { ChatOpenAI } = await import('@langchain/openai');
             llm = new ChatOpenAI({
               openAIApiKey: process.env.OPENAI_API_KEY!,
-              modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              modelName: process.env.OPENAI_MODEL || 'gpt-6-luna',
               temperature: 0.4,
               streaming: true,
             });
@@ -113,9 +126,11 @@ ${forecastSummary || '운세 요약 없음'}`;
             }
           }
 
-          // Post-safety check on output (AGENTS.md §4 — no deterministic predictions)
+          // Post-safety check on output (AGENTS.md §4 & §8 — no deterministic predictions)
+          const outputSafety = checkOutputSafety(fullText);
+          const safeText = outputSafety.sanitizedOutput ?? fullText;
           const forbiddenOutput = ['반드시 성공', '확실히 이루어', '100% 보장'];
-          let safetyFlag: string | null = null;
+          let safetyFlag: string | null = !outputSafety.safe ? 'DETERMINISTIC_REWRITE' : null;
           for (const pattern of forbiddenOutput) {
             if (fullText.includes(pattern)) {
               safetyFlag = 'DETERMINISTIC_REWRITE';
@@ -123,7 +138,11 @@ ${forecastSummary || '운세 요약 없음'}`;
             }
           }
 
-          send('done', { fullText, safetyFlag });
+          send('done', {
+            fullText: safeText,
+            safetyFlag,
+            safetyFlags: [...inputSafety.flags, ...outputSafety.flags],
+          });
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Chat error';
           send('error', { message: errorMessage });

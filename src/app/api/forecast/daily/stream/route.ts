@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
+import { checkInputSafety, checkOutputSafety } from '@/lib/safety';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { birthProfile, vibeData, personalContext, focusDomain, rlhfBias } = body;
+  const { birthProfile, vibeData, personalContext, focusDomain, rlhfBias, userMessage } = body;
 
   // Create ReadableStream for SSE
   const encoder = new TextEncoder();
@@ -16,6 +17,26 @@ export async function POST(req: NextRequest) {
       };
 
       try {
+        // 0. Safety Gate — check user input before any LLM call (AGENTS.md §8)
+        const combinedInput = [
+          userMessage,
+          vibeData?.oneLineEvent,
+          typeof personalContext === 'string' ? personalContext : JSON.stringify(personalContext || ''),
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const inputSafety = checkInputSafety(combinedInput);
+        if (!inputSafety.safe) {
+          const blockMsg =
+            inputSafety.flags[0]?.message ||
+            '안전 경계 정책에 의해 요청이 차단되었습니다. 전문 상담기관(자살예방상담전화 1393)에 연락하시기 바랍니다.';
+          send('token', { token: blockMsg });
+          send('summary', { text: blockMsg, safetyFlags: inputSafety.flags });
+          send('done', { timestamp: new Date().toISOString(), safetyFlags: inputSafety.flags });
+          controller.close();
+          return;
+        }
+
         // 1. Import deterministic chart calculation modules
         const { calculateChart, calculateDailyLuckRange, calculateMonthlyLuck, calculateAnnualLuck } =
           await import('@/lib/manse');
@@ -90,7 +111,7 @@ export async function POST(req: NextRequest) {
         const provider = process.env.GOOGLE_API_KEY ? 'google' : 'openai';
         const model = process.env.GOOGLE_API_KEY
           ? (process.env.GOOGLE_MODEL || 'gemini-2.5-flash')
-          : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
+          : (process.env.OPENAI_MODEL || 'gpt-6-luna');
 
         const { SystemMessage, HumanMessage } = await import('@langchain/core/messages');
 
@@ -130,9 +151,13 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 6. Send completed text
-        send('summary', { text: fullText });
-        send('done', { timestamp: new Date().toISOString() });
+        // 6. Safety Boundary Review on output before sending final summary (AGENTS.md §8)
+        const outputSafety = checkOutputSafety(fullText);
+        const safeText = outputSafety.sanitizedOutput ?? fullText;
+        const safetyFlags = [...inputSafety.flags, ...outputSafety.flags];
+
+        send('summary', { text: safeText, safetyFlags });
+        send('done', { timestamp: new Date().toISOString(), safetyFlags });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Stream error';
         send('error', { message });
